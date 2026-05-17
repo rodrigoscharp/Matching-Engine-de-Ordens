@@ -54,3 +54,4 @@ opentelemetry-javaagent*.jar
 
 # ── Checkstyle ────────────────────────────────────────────────────────────────
 checkstyle-result.xml
+modules/**/.jqwik-database
