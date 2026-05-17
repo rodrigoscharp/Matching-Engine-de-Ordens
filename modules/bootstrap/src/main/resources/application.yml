@@ -51,11 +51,29 @@ spring:
         schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8081}
         specific.avro.reader: true
 
+# ── Athena-specific Kafka topic configuration ─────────────────────────────────
+athena:
+  kafka:
+    topics:
+      partitions: ${KAFKA_TOPIC_PARTITIONS:3}
+      replication-factor: ${KAFKA_TOPIC_REPLICATION_FACTOR:1}
+
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
   servlet:
     context-path: /
+
+# ── Resilience4j ──────────────────────────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      kafkaPublisher:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
 
 grpc:
   server:

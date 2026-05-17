@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "OrderCancelledEvent",
+  "namespace": "com.athena.trading.avro",
+  "doc": "Raised when a resting order is removed from the book on client request.",
+  "fields": [
+    {"name": "orderId",               "type": "string",                                            "doc": "UUID of the cancelled order"},
+    {"name": "symbol",                "type": "string",                                            "doc": "Instrument identifier"},
+    {"name": "cancelledQuantityLots", "type": "long",                                              "doc": "Remaining quantity at time of cancellation, in lots"},
+    {"name": "occurredAt",            "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the cancellation was processed (epoch millis)"}
+  ]
+}

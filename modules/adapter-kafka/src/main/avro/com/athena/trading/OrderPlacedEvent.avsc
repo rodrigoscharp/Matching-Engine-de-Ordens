@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "OrderPlacedEvent",
+  "namespace": "com.athena.trading.avro",
+  "doc": "Raised when a new order enters the matching engine. Event-sourced from trading.orders.placed topic.",
+  "fields": [
+    {"name": "orderId",             "type": "string",                                                       "doc": "UUID of the order"},
+    {"name": "symbol",              "type": "string",                                                       "doc": "Instrument identifier (e.g. PETR4)"},
+    {"name": "side",                "type": "string",                                                       "doc": "BUY or SELL"},
+    {"name": "type",                "type": "string",                                                       "doc": "LIMIT or MARKET"},
+    {"name": "limitPriceTicks",     "type": ["null", "long"],   "default": null,                            "doc": "Price in integer ticks (ADR-006). Null for MARKET orders."},
+    {"name": "originalQuantityLots","type": "long",                                                         "doc": "Quantity in integer lots (ADR-006)"},
+    {"name": "sequence",            "type": "long",                                                         "doc": "Monotonically increasing sequence number within the book"},
+    {"name": "placedAt",            "type": {"type": "long", "logicalType": "timestamp-millis"},            "doc": "When the order was placed (epoch millis)"},
+    {"name": "idempotencyKey",      "type": "string",                                                       "doc": "Client-provided idempotency key"},
+    {"name": "occurredAt",          "type": {"type": "long", "logicalType": "timestamp-millis"},            "doc": "When this event was produced"}
+  ]
+}

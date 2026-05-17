@@ -4,15 +4,14 @@ import com.athena.trading.application.port.outbound.IdempotencyStore;
 import com.athena.trading.domain.OrderId;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.stereotype.Component;
 
 /**
- * In-memory idempotency store. Used in Sprint 3 until the Redis adapter is implemented in Sprint
- * 4. NOT persistent — keys are lost on restart.
+ * In-memory idempotency store. Used as a fallback when no Redis adapter is on the classpath (e.g.
+ * in slice tests). NOT persistent — keys are lost on restart.
  *
- * <p>TODO(Sprint 4): replace with Redis-backed implementation in adapter-redis.
+ * <p>In production, {@code RedisIdempotencyStore} in {@code adapter-redis} is the active bean;
+ * this class is only instantiated via {@code @ConditionalOnMissingBean} in TradingConfiguration.
  */
-@Component
 public class InMemoryIdempotencyStore implements IdempotencyStore {
 
   private final ConcurrentHashMap<String, OrderId> store = new ConcurrentHashMap<>();

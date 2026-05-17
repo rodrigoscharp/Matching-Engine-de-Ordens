@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "TradeExecutedEvent",
+  "namespace": "com.athena.trading.avro",
+  "doc": "Raised when a buy and a sell order match. Execution price is always the resting (passive) order's price.",
+  "fields": [
+    {"name": "tradeId",               "type": "string",                                            "doc": "UUID of the trade"},
+    {"name": "symbol",                "type": "string",                                            "doc": "Instrument identifier"},
+    {"name": "buyOrderId",            "type": "string",                                            "doc": "UUID of the buy order"},
+    {"name": "sellOrderId",           "type": "string",                                            "doc": "UUID of the sell order"},
+    {"name": "executionPriceTicks",   "type": "long",                                              "doc": "Execution price in integer ticks (passive order's price)"},
+    {"name": "executionQuantityLots", "type": "long",                                              "doc": "Matched quantity in lots"},
+    {"name": "occurredAt",            "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the trade was executed (epoch millis)"}
+  ]
+}
