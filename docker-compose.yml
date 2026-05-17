@@ -15,7 +15,7 @@ services:
       POSTGRES_USER: athena
       POSTGRES_PASSWORD: athena
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
