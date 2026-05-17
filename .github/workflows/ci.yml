@@ -33,8 +33,11 @@ jobs:
       - name: Check Spotless formatting (requires JDK 21 — google-java-format incompatible with JDK 22+)
         run: ./mvnw spotless:check -q
 
-      - name: Run full verification
+      - name: Run full verification (unit tests + ArchUnit + JaCoCo)
         run: ./mvnw verify -T 1C
+
+      - name: Run integration tests (Testcontainers — requires Docker)
+        run: ./mvnw verify -DskipITs=false -T 1C
 
       - name: Upload JaCoCo coverage reports
         if: always()

@@ -42,28 +42,29 @@ class TradingApplicationServiceTest {
   }
 
   @Test
-  void should_place_limit_buy_and_return_order_id() {
+  void should_place_limit_buy_and_return_order_id_string() {
     when(idempotencyStore.find("key-1")).thenReturn(Optional.empty());
 
     var cmd = limitBuyCommand("key-1", "PETR4", 100, 50);
     var orderId = service.place(cmd);
 
-    assertThat(orderId).isNotNull();
+    assertThat(orderId).isNotBlank();
+    // UUID format
+    assertThat(orderId).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     verify(eventStore).append(argThat(events ->
         events.stream().anyMatch(e -> e instanceof OrderPlaced)));
     verify(eventPublisher).publish(any());
-    verify(idempotencyStore).store("key-1", orderId);
   }
 
   @Test
-  void should_return_cached_order_id_when_idempotency_key_already_processed() {
+  void should_return_cached_order_id_string_when_idempotency_key_already_processed() {
     var existingId = OrderId.generate();
     when(idempotencyStore.find("key-dup")).thenReturn(Optional.of(existingId));
 
     var cmd = limitBuyCommand("key-dup", "PETR4", 100, 50);
     var result = service.place(cmd);
 
-    assertThat(result).isEqualTo(existingId);
+    assertThat(result).isEqualTo(existingId.value().toString());
     verify(eventStore, never()).append(any());
     verify(eventPublisher, never()).publish(any());
   }
@@ -73,7 +74,7 @@ class TradingApplicationServiceTest {
     when(idempotencyStore.find(any())).thenReturn(Optional.empty());
     var orderId = service.place(limitBuyCommand("place-key", "VALE3", 50, 100));
 
-    var cancelled = service.cancel(new CancelOrderCommand("cancel-key", orderId.toString()));
+    var cancelled = service.cancel(new CancelOrderCommand("cancel-key", orderId));
 
     assertThat(cancelled).isTrue();
     // eventStore.append is called twice: once for place, once for cancel

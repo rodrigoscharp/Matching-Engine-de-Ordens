@@ -97,6 +97,13 @@
     <maven-surefire-plugin.version>3.3.1</maven-surefire-plugin.version>
     <maven-failsafe-plugin.version>3.3.1</maven-failsafe-plugin.version>
 
+    <!-- Default empty argLine so @{argLine} never expands to the literal string when JaCoCo
+         hasn't run (e.g., modules with no production sources). JaCoCo will prepend its agent arg. -->
+    <argLine></argLine>
+
+    <!-- Skip integration tests by default (Docker required). Use 'make verify-it' to run them. -->
+    <skipITs>true</skipITs>
+
     <!-- JaCoCo thresholds -->
     <jacoco.line.minimum>0.90</jacoco.line.minimum>
     <jacoco.branch.minimum>0.80</jacoco.branch.minimum>
@@ -532,6 +539,13 @@
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <skipITs>${skipITs}</skipITs>
+        </configuration>
       </plugin>
     </plugins>
   </build>

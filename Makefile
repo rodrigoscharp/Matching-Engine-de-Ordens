@@ -49,6 +49,10 @@ verify: ## Full verification: compile, unit tests, ArchUnit, JaCoCo (Spotless en
 	@echo "→ Running full verification pipeline…"
 	$(MVN) verify -T 1C
 
+verify-it: ## Full verification including integration tests (requires Docker)
+	@echo "→ Running full verification with integration tests (requires Docker)…"
+	$(MVN) verify -DskipITs=false
+
 # ── Run ────────────────────────────────────────────────────────────────────────
 run: ## Start the application locally (requires infra-up first)
 	@echo "→ Starting Athena on :8080 (gRPC :9090)…"

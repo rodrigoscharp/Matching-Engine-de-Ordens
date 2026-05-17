@@ -3,6 +3,7 @@ package com.athena.trading.application.service;
 import com.athena.trading.application.command.CancelOrderCommand;
 import com.athena.trading.application.command.PlaceOrderCommand;
 import com.athena.trading.application.port.inbound.CancelOrderUseCase;
+import com.athena.trading.application.port.inbound.GetBookSnapshotUseCase;
 import com.athena.trading.application.port.inbound.PlaceOrderUseCase;
 import com.athena.trading.application.port.outbound.DomainEventPublisher;
 import com.athena.trading.application.port.outbound.IdempotencyStore;
@@ -10,6 +11,7 @@ import com.athena.trading.application.port.outbound.OrderEventStore;
 import com.athena.trading.domain.InvalidOrderException;
 import com.athena.trading.domain.Order;
 import com.athena.trading.domain.OrderBook;
+import com.athena.trading.domain.OrderBookSnapshot;
 import com.athena.trading.domain.OrderId;
 import com.athena.trading.domain.Price;
 import com.athena.trading.domain.Quantity;
@@ -18,6 +20,7 @@ import com.athena.trading.domain.event.OrderCancelled;
 import com.athena.trading.domain.event.OrderEvent;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -34,7 +37,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p><b>Persistence and Kafka</b>: injected as outbound ports — no direct dependency on Spring or
  * infrastructure. The application layer only knows about interfaces.
  */
-public final class TradingApplicationService implements PlaceOrderUseCase, CancelOrderUseCase {
+public final class TradingApplicationService
+    implements PlaceOrderUseCase, CancelOrderUseCase, GetBookSnapshotUseCase {
 
   private final Map<Symbol, OrderBook> books = new ConcurrentHashMap<>();
   private final OrderEventStore eventStore;
@@ -51,11 +55,11 @@ public final class TradingApplicationService implements PlaceOrderUseCase, Cance
   }
 
   @Override
-  public OrderId place(PlaceOrderCommand cmd) {
+  public String place(PlaceOrderCommand cmd) {
     // Idempotency check — return early if already processed
     Optional<OrderId> existing = idempotencyStore.find(cmd.idempotencyKey());
     if (existing.isPresent()) {
-      return existing.get();
+      return existing.get().value().toString();
     }
 
     OrderBook book = bookFor(Symbol.of(cmd.symbol()));
@@ -72,7 +76,7 @@ public final class TradingApplicationService implements PlaceOrderUseCase, Cance
     eventPublisher.publish(events);
     idempotencyStore.store(cmd.idempotencyKey(), order.orderId());
 
-    return order.orderId();
+    return order.orderId().value().toString();
   }
 
   @Override
@@ -142,6 +146,11 @@ public final class TradingApplicationService implements PlaceOrderUseCase, Cance
       case SELL ->
           Order.marketSell(id, symbol, qty, seq, Instant.now(), cmd.idempotencyKey());
     };
+  }
+
+  @Override
+  public Optional<OrderBookSnapshot> getSnapshot(String symbol) {
+    return Optional.ofNullable(books.get(Symbol.of(symbol))).map(OrderBook::snapshot);
   }
 
   // Package-private for testing — allows injecting a specific book
