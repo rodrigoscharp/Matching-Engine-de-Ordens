@@ -2,6 +2,12 @@ spring:
   application:
     name: athena-matching-engine
 
+  # Virtual threads for I/O adapters (Loom, JDK 21+).
+  # The matching thread itself is a PLATFORM thread — CPU-bound, no blocking.
+  threads:
+    virtual:
+      enabled: ${VIRTUAL_THREADS_ENABLED:true}
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:athena}
     username: ${DB_USER:athena}
@@ -51,8 +57,14 @@ spring:
         schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8081}
         specific.avro.reader: true
 
-# ── Athena-specific Kafka topic configuration ─────────────────────────────────
+
+# ── Athena engine configuration ───────────────────────────────────────────────
 athena:
+  engine:
+    # Ring buffer size must be a power of 2 (Disruptor requirement)
+    ring-buffer-size: ${ENGINE_RING_BUFFER_SIZE:4096}
+    # Matching thread command timeout (milliseconds)
+    command-timeout-ms: ${ENGINE_COMMAND_TIMEOUT_MS:5000}
   kafka:
     topics:
       partitions: ${KAFKA_TOPIC_PARTITIONS:3}

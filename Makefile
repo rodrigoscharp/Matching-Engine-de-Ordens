@@ -47,7 +47,7 @@ format: ## Apply Spotless (google-java-format) — requires JDK 21
 
 verify: ## Full verification: compile, unit tests, ArchUnit, JaCoCo (Spotless enforced in CI with JDK 21)
 	@echo "→ Running full verification pipeline…"
-	$(MVN) verify -T 1C
+	$(MVN) verify
 
 verify-it: ## Full verification including integration tests (requires Docker)
 	@echo "→ Running full verification with integration tests (requires Docker)…"
@@ -63,9 +63,9 @@ smoke: ## Run smoke tests against a running local instance
 	@echo "→ Running smoke tests…"
 	@bash scripts/smoke.sh
 
-bench: ## Run JMH micro-benchmarks
+bench: ## Run JMH micro-benchmarks (OrderBook throughput + latency)
 	@echo "→ Running JMH benchmarks…"
-	$(MVN) -pl modules/domain test -Pbenchmark
+	$(MVN) -pl modules/domain test -Dtest=OrderBookBenchmark -Dsurefire.failIfNoSpecifiedTests=false
 
 load: ## Run Gatling load tests (requires a running instance)
 	@echo "→ Running Gatling load tests against localhost:8080…"

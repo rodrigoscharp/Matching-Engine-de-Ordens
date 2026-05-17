@@ -34,10 +34,10 @@ jobs:
         run: ./mvnw spotless:apply -q
 
       - name: Run full verification (unit tests + ArchUnit + JaCoCo)
-        run: ./mvnw verify -T 1C
+        run: ./mvnw verify
 
       - name: Run integration tests (Testcontainers — requires Docker)
-        run: ./mvnw verify -DskipITs=false -T 1C
+        run: ./mvnw verify -DskipITs=false
 
       - name: Upload JaCoCo coverage reports
         if: always()
