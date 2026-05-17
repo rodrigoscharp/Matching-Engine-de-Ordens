@@ -40,6 +40,16 @@
       <artifactId>flyway-database-postgresql</artifactId>
     </dependency>
 
+    <!-- Jackson for event payload serialization (no Spring Web dep here) -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.datatype</groupId>
+      <artifactId>jackson-datatype-jsr310</artifactId>
+    </dependency>
+
     <!-- Test -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

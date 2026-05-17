@@ -75,6 +75,12 @@ management:
       show-details: always
       probes:
         enabled: true
+  health:
+    # Kafka and Redis health checks connect at startup — disable for local/dev when infra may be absent
+    kafka:
+      enabled: ${HEALTH_KAFKA_ENABLED:false}
+    redis:
+      enabled: ${HEALTH_REDIS_ENABLED:false}
   metrics:
     export:
       prometheus:
