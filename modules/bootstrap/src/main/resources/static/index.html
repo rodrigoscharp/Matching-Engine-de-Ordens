@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATHENA — Matching Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Orbitron:wght@700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+<style>
+  :root {
+    --bg0: #060910;
+    --bg1: #0c1220;
+    --bg2: #111a2e;
+    --bg3: #172038;
+    --border: #1e2d48;
+    --border-bright: #2a3f5f;
+    --bid: #00d26a;
+    --bid-dim: rgba(0,210,106,0.12);
+    --bid-glow: rgba(0,210,106,0.25);
+    --ask: #ff4757;
+    --ask-dim: rgba(255,71,87,0.12);
+    --ask-glow: rgba(255,71,87,0.25);
+    --accent: #3d9eff;
+    --accent-dim: rgba(61,158,255,0.15);
+    --amber: #ffa502;
+    --text-primary: #e8f0f8;
+    --text-secondary: #7a8fa8;
+    --text-dim: #3d5470;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+    --display: 'Orbitron', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg0);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    cursor: default;
+    user-select: none;
+  }
+
+  /* ── Scanline overlay ─────────────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.04) 2px,
+      rgba(0,0,0,0.04) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 0 20px;
+    height: 48px;
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    color: var(--text-primary);
+    text-shadow: 0 0 20px rgba(61,158,255,0.4);
+  }
+
+  .logo span { color: var(--accent); }
+
+  .header-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border-bright);
+  }
+
+  .header-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .conn-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.3s;
+    position: relative;
+  }
+
+  .conn-dot.connected {
+    background: var(--bid);
+    box-shadow: 0 0 8px var(--bid-glow);
+    animation: pulse 2s infinite;
+  }
+
+  .conn-dot.disconnected { background: var(--ask); }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 6px var(--bid-glow); }
+    50% { box-shadow: 0 0 14px var(--bid-glow), 0 0 28px var(--bid-dim); }
+  }
+
+  .clock {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+  }
+
+  /* ── Symbol bar ──────────────────────────────────────────────────────── */
+  .symbol-bar {
+    display: flex;
+    align-items: stretch;
+    padding: 0 20px;
+    height: 40px;
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .sym-tab {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    padding: 0 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    border-bottom: 2px solid transparent;
+  }
+
+  .sym-tab:hover { color: var(--text-secondary); }
+
+  .sym-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .sym-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .stats-strip {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .stat-value.bid { color: var(--bid); }
+  .stat-value.ask { color: var(--ask); }
+  .stat-value.spread { color: var(--amber); }
+
+  /* ── Main layout ─────────────────────────────────────────────────────── */
+  .main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: 1fr 180px;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .panel {
+    background: var(--bg1);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    height: 36px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--bg2);
+  }
+
+  .panel-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .panel-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: var(--bg3);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Order book ──────────────────────────────────────────────────────── */
+  .book-panel {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .book-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+  }
+
+  .book-side {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .book-side-header {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 12px;
+    padding: 6px 16px;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .book-side.asks .book-side-header {
+    grid-template-columns: auto auto 1fr;
+    text-align: right;
+  }
+
+  .book-rows {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: none;
+  }
+
+  .book-rows::-webkit-scrollbar { display: none; }
+
+  .book-side.bids { border-right: 1px solid var(--border); }
+
+  .book-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 12px;
+    padding: 3px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    align-items: center;
+    position: relative;
+    transition: background 0.1s;
+  }
+
+  .book-side.asks .book-row {
+    grid-template-columns: auto auto 1fr;
+    direction: rtl;
+  }
+
+  .book-side.asks .book-row > * { direction: ltr; }
+
+  .book-row:hover { background: rgba(255,255,255,0.02); }
+
+  .book-row.flash-bid { animation: flash-bid 0.3s ease-out; }
+  .book-row.flash-ask { animation: flash-ask 0.3s ease-out; }
+
+  @keyframes flash-bid {
+    0% { background: var(--bid-dim); }
+    100% { background: transparent; }
+  }
+
+  @keyframes flash-ask {
+    0% { background: var(--ask-dim); }
+    100% { background: transparent; }
+  }
+
+  .depth-bar {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    opacity: 0.08;
+    pointer-events: none;
+    transition: width 0.2s ease;
+  }
+
+  .book-side.bids .depth-bar {
+    right: 0;
+    background: var(--bid);
+  }
+
+  .book-side.asks .depth-bar {
+    left: 0;
+    background: var(--ask);
+  }
+
+  .price-bid { color: var(--bid); font-weight: 500; }
+  .price-ask { color: var(--ask); font-weight: 500; }
+  .qty { color: var(--text-primary); }
+  .orders { color: var(--text-dim); font-size: 10px; }
+
+  .book-spread {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .book-spread .spread-val { color: var(--amber); font-weight: 500; }
+
+  .book-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  /* ── Order entry ─────────────────────────────────────────────────────── */
+  .order-panel {
+    grid-row: 1;
+    grid-column: 2;
+    border-left: none;
+  }
+
+  .order-form {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .side-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .side-btn {
+    padding: 10px;
+    border: none;
+    background: var(--bg2);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .side-btn.buy.active {
+    background: rgba(0,210,106,0.18);
+    color: var(--bid);
+    box-shadow: inset 0 0 0 1px var(--bid);
+    text-shadow: 0 0 8px var(--bid-glow);
+  }
+
+  .side-btn.sell.active {
+    background: rgba(255,71,87,0.18);
+    color: var(--ask);
+    box-shadow: inset 0 0 0 1px var(--ask);
+    text-shadow: 0 0 8px var(--ask-glow);
+  }
+
+  .type-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .type-btn {
+    padding: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+  }
+
+  .type-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .field-group { display: flex; flex-direction: column; gap: 5px; }
+
+  .field-label {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .field-input {
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 9px 12px;
+    background: var(--bg0);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 2px;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+
+  .field-input:focus { border-color: var(--accent); }
+  .field-input:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .submit-btn {
+    margin-top: 4px;
+    padding: 12px;
+    border: none;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .submit-btn.buy-mode {
+    background: linear-gradient(135deg, rgba(0,210,106,0.2), rgba(0,210,106,0.08));
+    border: 1px solid var(--bid);
+    color: var(--bid);
+  }
+
+  .submit-btn.sell-mode {
+    background: linear-gradient(135deg, rgba(255,71,87,0.2), rgba(255,71,87,0.08));
+    border: 1px solid var(--ask);
+    color: var(--ask);
+  }
+
+  .submit-btn:hover {
+    filter: brightness(1.2);
+    box-shadow: 0 0 20px rgba(0,0,0,0.3);
+  }
+
+  .submit-btn:active { transform: scale(0.98); }
+
+  .submit-btn.loading { opacity: 0.6; pointer-events: none; }
+
+  .order-result {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 8px 10px;
+    border-radius: 2px;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  .order-result.success {
+    background: rgba(0,210,106,0.1);
+    border: 1px solid rgba(0,210,106,0.3);
+    color: var(--bid);
+  }
+
+  .order-result.error {
+    background: rgba(255,71,87,0.1);
+    border: 1px solid rgba(255,71,87,0.3);
+    color: var(--ask);
+  }
+
+  /* ── Activity feed ───────────────────────────────────────────────────── */
+  .feed-panel {
+    grid-row: 2;
+    grid-column: 1 / 3;
+    border-top: none;
+  }
+
+  .feed-rows {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .feed-row {
+    display: grid;
+    grid-template-columns: 80px 110px 60px 100px 80px 1fr;
+    gap: 0;
+    padding: 5px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    border-bottom: 1px solid rgba(30,45,72,0.5);
+    align-items: center;
+    animation: feed-in 0.2s ease-out;
+  }
+
+  @keyframes feed-in {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .feed-row:hover { background: rgba(255,255,255,0.02); }
+
+  .feed-time { color: var(--text-dim); }
+  .feed-type { color: var(--text-secondary); letter-spacing: 0.5px; }
+  .feed-type.trade { color: var(--amber); }
+  .feed-side-buy { color: var(--bid); font-weight: 500; }
+  .feed-side-sell { color: var(--ask); font-weight: 500; }
+  .feed-qty { color: var(--text-primary); text-align: right; }
+  .feed-price { color: var(--text-primary); text-align: right; }
+  .feed-id { color: var(--text-dim); font-size: 10px; padding-left: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .feed-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  /* ── Scrollbar ───────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+  /* ── Grid lines ──────────────────────────────────────────────────────── */
+  .main > .panel { border-radius: 0; }
+  .main > .panel:first-child { border-top-left-radius: 0; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="logo">ATH<span>E</span>NA</div>
+  <div class="header-sep"></div>
+  <div class="header-label">Matching Engine v0.1.0-SNAPSHOT</div>
+  <div class="header-right">
+    <div class="conn-status">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connLabel">CONNECTING</span>
+    </div>
+    <div class="header-sep"></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- Symbol bar -->
+<div class="symbol-bar">
+  <button class="sym-tab active" onclick="selectSymbol('PETR4',this)">PETR4</button>
+  <button class="sym-tab" onclick="selectSymbol('VALE3',this)">VALE3</button>
+  <button class="sym-tab" onclick="selectSymbol('ITUB4',this)">ITUB4</button>
+  <button class="sym-tab" onclick="selectSymbol('BBDC4',this)">BBDC4</button>
+  <div class="stats-strip">
+    <div class="stat">
+      <span class="stat-label">BID</span>
+      <span class="stat-value bid" id="statBid">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">ASK</span>
+      <span class="stat-value ask" id="statAsk">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">SPREAD</span>
+      <span class="stat-value spread" id="statSpread">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">LEVELS</span>
+      <span class="stat-value" id="statLevels" style="color:var(--text-secondary)">—</span>
+    </div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Order Book -->
+  <div class="panel book-panel">
+    <div class="panel-header">
+      <span class="panel-title">Order Book</span>
+      <span class="panel-badge" id="bookSymbolBadge">PETR4</span>
+      <span class="panel-badge" id="bookTs" style="margin-left:auto"></span>
+    </div>
+    <div class="book-content">
+      <!-- Bids -->
+      <div class="book-side bids">
+        <div class="book-side-header">
+          <span>TOTAL</span><span>QTY</span><span>BID</span>
+        </div>
+        <div class="book-rows" id="bidsRows">
+          <div class="book-empty">Aguardando dados...</div>
+        </div>
+      </div>
+      <!-- Asks -->
+      <div class="book-side asks">
+        <div class="book-side-header" style="text-align:right; grid-template-columns:1fr auto auto">
+          <span>ASK</span><span>QTY</span><span>TOTAL</span>
+        </div>
+        <div class="book-rows" id="asksRows">
+          <div class="book-empty">Aguardando dados...</div>
+        </div>
+      </div>
+    </div>
+    <div class="book-spread" id="bookSpread">
+      <span>SPREAD</span><span class="spread-val" id="spreadVal">—</span>
+    </div>
+  </div>
+
+  <!-- Order Entry -->
+  <div class="panel order-panel">
+    <div class="panel-header">
+      <span class="panel-title">Nova Ordem</span>
+    </div>
+    <div class="order-form">
+
+      <!-- Side -->
+      <div class="side-toggle">
+        <button class="side-btn buy active" id="btnBuy" onclick="setSide('BUY')">▲ BUY</button>
+        <button class="side-btn sell"       id="btnSell" onclick="setSide('SELL')">▼ SELL</button>
+      </div>
+
+      <!-- Type -->
+      <div class="type-toggle">
+        <button class="type-btn active" id="btnLimit"  onclick="setType('LIMIT')">LIMIT</button>
+        <button class="type-btn"        id="btnMarket" onclick="setType('MARKET')">MARKET</button>
+      </div>
+
+      <!-- Price -->
+      <div class="field-group">
+        <label class="field-label">Preço (R$)</label>
+        <input class="field-input" id="fPrice" type="number" step="0.01" min="0.01" placeholder="0.00">
+      </div>
+
+      <!-- Qty -->
+      <div class="field-group">
+        <label class="field-label">Quantidade (lotes)</label>
+        <input class="field-input" id="fQty" type="number" step="1" min="1" value="100" placeholder="100">
+      </div>
+
+      <!-- Submit -->
+      <button class="submit-btn buy-mode" id="submitBtn" onclick="placeOrder()">
+        PLACE ORDER
+      </button>
+
+      <!-- Result -->
+      <div id="orderResult" style="display:none"></div>
+
+    </div>
+  </div>
+
+  <!-- Activity Feed -->
+  <div class="panel feed-panel">
+    <div class="panel-header">
+      <span class="panel-title">Activity Feed</span>
+      <span class="panel-badge" id="feedCount">0 eventos</span>
+    </div>
+    <div class="feed-rows" id="feedRows">
+      <div class="feed-empty">Nenhuma atividade ainda — coloque uma ordem para começar.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let currentSymbol = 'PETR4';
+let currentSide = 'BUY';
+let currentType = 'LIMIT';
+let stompClient = null;
+let currentSubs = {};
+let feedItems = [];
+let bookCache = {};
+let prevBids = {}, prevAsks = {};
+
+// ── Clock ──────────────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('pt-BR', {hour12: false});
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── Symbol selection ───────────────────────────────────────────────────────────
+function selectSymbol(sym, btn) {
+  document.querySelectorAll('.sym-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentSymbol = sym;
+  document.getElementById('bookSymbolBadge').textContent = sym;
+  subscribeBook(sym);
+  fetchBook(sym);
+}
+
+// ── WebSocket / STOMP ──────────────────────────────────────────────────────────
+function connect() {
+  const dot = document.getElementById('connDot');
+  const label = document.getElementById('connLabel');
+
+  stompClient = new StompJs.Client({
+    webSocketFactory: () => new SockJS('/ws'),
+    reconnectDelay: 3000,
+    onConnect: () => {
+      dot.className = 'conn-dot connected';
+      label.textContent = 'CONNECTED';
+      subscribeBook(currentSymbol);
+      fetchBook(currentSymbol);
+    },
+    onDisconnect: () => {
+      dot.className = 'conn-dot disconnected';
+      label.textContent = 'DISCONNECTED';
+    },
+    onStompError: () => {
+      dot.className = 'conn-dot disconnected';
+      label.textContent = 'ERROR';
+    }
+  });
+  stompClient.activate();
+}
+
+function subscribeBook(sym) {
+  if (currentSubs[sym]) return;
+  if (!stompClient || !stompClient.connected) return;
+  currentSubs[sym] = stompClient.subscribe(`/topic/books/${sym}`, msg => {
+    const data = JSON.parse(msg.body);
+    if (data.symbol === currentSymbol) renderBook(data);
+  });
+}
+
+// ── Fetch book (REST fallback + initial load) ──────────────────────────────────
+function fetchBook(sym) {
+  fetch(`/api/v1/books/${sym}`)
+    .then(r => r.json())
+    .then(data => { if (data.symbol === currentSymbol) renderBook(data); })
+    .catch(() => {});
+}
+
+// Auto-poll every 1s as fallback
+setInterval(() => fetchBook(currentSymbol), 1000);
+
+// ── Render order book ──────────────────────────────────────────────────────────
+function fmt(n) {
+  return Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function fmtQty(n) { return Number(n).toLocaleString('pt-BR'); }
+
+function renderBook(data) {
+  const bids = data.bids || [];
+  const asks = data.asks || [];
+
+  // Stats
+  const bestBid = bids[0]?.price;
+  const bestAsk = asks[0]?.price;
+  document.getElementById('statBid').textContent = bestBid ? fmt(bestBid) : '—';
+  document.getElementById('statAsk').textContent = bestAsk ? fmt(bestAsk) : '—';
+
+  if (bestBid && bestAsk) {
+    const spread = (Number(bestAsk) - Number(bestBid)).toFixed(2);
+    document.getElementById('statSpread').textContent = fmt(spread);
+    document.getElementById('spreadVal').textContent = fmt(spread);
+  } else {
+    document.getElementById('statSpread').textContent = '—';
+    document.getElementById('spreadVal').textContent = '—';
+  }
+
+  document.getElementById('statLevels').textContent =
+    `${bids.length}B / ${asks.length}A`;
+
+  const ts = new Date(data.takenAt);
+  document.getElementById('bookTs').textContent =
+    ts.toLocaleTimeString('pt-BR', {hour12: false, fractionalSecondDigits: 1});
+
+  // Max qty for depth bars
+  const allQty = [...bids, ...asks].map(l => Number(l.totalQuantity));
+  const maxQty = allQty.length ? Math.max(...allQty) : 1;
+
+  // Render bids
+  const bidsEl = document.getElementById('bidsRows');
+  if (!bids.length) {
+    bidsEl.innerHTML = '<div class="book-empty">— sem bids —</div>';
+  } else {
+    bidsEl.innerHTML = bids.slice(0,20).map((l, i) => {
+      const pKey = String(l.price);
+      const changed = prevBids[pKey] !== undefined && prevBids[pKey] !== String(l.totalQuantity);
+      const pct = (Number(l.totalQuantity) / maxQty * 100).toFixed(1);
+      return `<div class="book-row${changed ? ' flash-bid' : ''}">
+        <div class="depth-bar" style="width:${pct}%"></div>
+        <span class="orders">${l.orderCount}</span>
+        <span class="qty">${fmtQty(l.totalQuantity)}</span>
+        <span class="price-bid">${fmt(l.price)}</span>
+      </div>`;
+    }).join('');
+  }
+  // Update prev
+  prevBids = {};
+  bids.forEach(l => prevBids[String(l.price)] = String(l.totalQuantity));
+
+  // Render asks (reversed — best ask at top)
+  const asksEl = document.getElementById('asksRows');
+  if (!asks.length) {
+    asksEl.innerHTML = '<div class="book-empty">— sem asks —</div>';
+  } else {
+    asksEl.innerHTML = asks.slice(0,20).map((l, i) => {
+      const pKey = String(l.price);
+      const changed = prevAsks[pKey] !== undefined && prevAsks[pKey] !== String(l.totalQuantity);
+      const pct = (Number(l.totalQuantity) / maxQty * 100).toFixed(1);
+      return `<div class="book-row${changed ? ' flash-ask' : ''}">
+        <div class="depth-bar" style="width:${pct}%"></div>
+        <span class="price-ask">${fmt(l.price)}</span>
+        <span class="qty">${fmtQty(l.totalQuantity)}</span>
+        <span class="orders">${l.orderCount}</span>
+      </div>`;
+    }).join('');
+  }
+  prevAsks = {};
+  asks.forEach(l => prevAsks[String(l.price)] = String(l.totalQuantity));
+}
+
+// ── Order entry ────────────────────────────────────────────────────────────────
+function setSide(side) {
+  currentSide = side;
+  document.getElementById('btnBuy').classList.toggle('active', side === 'BUY');
+  document.getElementById('btnSell').classList.toggle('active', side === 'SELL');
+  const btn = document.getElementById('submitBtn');
+  btn.className = `submit-btn ${side === 'BUY' ? 'buy' : 'sell'}-mode`;
+  btn.textContent = `${side === 'BUY' ? '▲ PLACE BUY' : '▼ PLACE SELL'}`;
+}
+
+function setType(type) {
+  currentType = type;
+  document.getElementById('btnLimit').classList.toggle('active', type === 'LIMIT');
+  document.getElementById('btnMarket').classList.toggle('active', type === 'MARKET');
+  document.getElementById('fPrice').disabled = type === 'MARKET';
+}
+
+async function placeOrder() {
+  const btn = document.getElementById('submitBtn');
+  const resultEl = document.getElementById('orderResult');
+
+  const price = document.getElementById('fPrice').value;
+  const qty = document.getElementById('fQty').value;
+
+  if (!qty || Number(qty) < 1) {
+    showResult('error', 'Quantidade inválida');
+    return;
+  }
+  if (currentType === 'LIMIT' && (!price || Number(price) <= 0)) {
+    showResult('error', 'Preço inválido para ordem LIMIT');
+    return;
+  }
+
+  btn.classList.add('loading');
+  btn.textContent = '⟳ ENVIANDO...';
+
+  const body = {
+    symbol: currentSymbol,
+    side: currentSide,
+    type: currentType,
+    quantity: qty
+  };
+  if (currentType === 'LIMIT') body.price = price;
+
+  try {
+    const res = await fetch('/api/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': crypto.randomUUID()
+      },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      showResult('success', `✓ Ordem aceita\n${data.orderId}`);
+      addFeedItem({
+        type: 'ORDER_PLACED',
+        side: currentSide,
+        qty: fmtQty(qty),
+        price: currentType === 'LIMIT' ? fmt(price) : 'MARKET',
+        symbol: currentSymbol,
+        id: data.orderId
+      });
+      fetchBook(currentSymbol);
+    } else {
+      showResult('error', data.message || data.error || `Erro ${res.status}`);
+    }
+  } catch (e) {
+    showResult('error', 'Falha de comunicação com o servidor');
+  }
+
+  setSide(currentSide);
+  btn.classList.remove('loading');
+}
+
+function showResult(type, msg) {
+  const el = document.getElementById('orderResult');
+  el.className = `order-result ${type}`;
+  el.textContent = msg;
+  el.style.display = 'block';
+  if (type === 'success') setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+// ── Feed ───────────────────────────────────────────────────────────────────────
+function addFeedItem(item) {
+  feedItems.unshift({ ...item, time: new Date() });
+  if (feedItems.length > 100) feedItems.pop();
+  renderFeed();
+}
+
+function renderFeed() {
+  const el = document.getElementById('feedRows');
+  document.getElementById('feedCount').textContent = `${feedItems.length} eventos`;
+
+  if (!feedItems.length) {
+    el.innerHTML = '<div class="feed-empty">Nenhuma atividade ainda.</div>';
+    return;
+  }
+
+  el.innerHTML = feedItems.map(item => {
+    const t = item.time.toLocaleTimeString('pt-BR', {hour12: false});
+    const sideClass = item.side === 'BUY' ? 'feed-side-buy' : 'feed-side-sell';
+    const typeClass = item.type === 'TRADE_EXECUTED' ? 'trade' : '';
+    const shortId = item.id ? item.id.substring(0,8) + '...' : '';
+    return `<div class="feed-row">
+      <span class="feed-time">${t}</span>
+      <span class="feed-type ${typeClass}">${item.type}</span>
+      <span class="${sideClass}">${item.side || ''}</span>
+      <span class="feed-qty">${item.qty} lotes</span>
+      <span class="feed-price">@ ${item.price}</span>
+      <span class="feed-id">${item.symbol} ${shortId}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+setSide('BUY');
+renderFeed();
+connect();
+</script>
+</body>
+</html>
