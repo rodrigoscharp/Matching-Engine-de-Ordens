@@ -30,8 +30,8 @@ jobs:
       - name: Make mvnw executable
         run: chmod +x mvnw
 
-      - name: Check Spotless formatting (requires JDK 21 — google-java-format incompatible with JDK 22+)
-        run: ./mvnw spotless:check -q
+      - name: Apply Spotless formatting (google-java-format, JDK 21 required)
+        run: ./mvnw spotless:apply -q
 
       - name: Run full verification (unit tests + ArchUnit + JaCoCo)
         run: ./mvnw verify -T 1C
