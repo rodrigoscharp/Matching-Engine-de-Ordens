@@ -1,112 +1,326 @@
-# Athena
+# Athena Matching Engine
 
-Motor de matching de ordens multi-asset em Java 21 + Spring Boot 3.3 — projeto de estudo e portfólio para posições backend em fintechs e bigtechs.
+A high-performance, multi-asset order matching engine built with Java 21 and Spring Boot 3.3.
+Designed to demonstrate production-grade engineering practices relevant to fintech backend roles:
+hexagonal architecture, event sourcing, LMAX Disruptor concurrency, and full observability stack.
 
-## Por que esse projeto
+---
 
-Quero entender como exchanges funcionam de dentro: como um order book é mantido eficientemente, como se garante que duas ordens casam exatamente uma vez e nenhuma outra vez, e o que separa um sistema financeiro de um CRUD bem feito. A Athena é o laboratório onde respondo essas perguntas com código real, não com slides.
+## What This Project Does
 
-## Estado atual
+Athena accepts limit and market orders via REST, gRPC, or WebSocket; matches them using
+price-time priority; publishes trade executions to Kafka; and provides a real-time order book
+via a live trading dashboard.
 
-Em desenvolvimento ativo — sprints quinzenais. Sprint 1 (Foundation) em andamento. Veja o [Roadmap](#roadmap).
+```
+Client → REST / gRPC / WebSocket
+             ↓
+        [Athena Engine]
+             │
+             ├─→ PostgreSQL   (event store — source of truth)
+             ├─→ Redis        (idempotency keys, hot snapshots)
+             └─→ Kafka        (trade execution stream)
+```
 
-## Em uma frase técnica
+The domain is intentionally decoupled from every framework. The matching logic in `modules/domain`
+has zero Spring, zero Kafka, zero JDBC — it is plain Java 21. Hexagonal boundary violations
+break the build via ArchUnit.
 
-Hexagonal Architecture + DDD tático + Event Sourcing + CQRS sobre LMAX Disruptor, Kafka e PostgreSQL, exposto via REST / gRPC / WebSocket, com observabilidade completa (Micrometer, OpenTelemetry, Prometheus, Grafana).
+---
 
-## Stack
+## Architecture
 
-| Camada | Tecnologia |
-|--------|-----------|
-| Runtime | Java 21, Spring Boot 3.3 |
-| Concorrência | LMAX Disruptor 4, Virtual Threads |
-| Persistência | PostgreSQL 16, Spring Data JDBC, Flyway 10 |
-| Mensageria | Kafka 3.7, Confluent Schema Registry, Avro |
-| APIs | REST (Spring MVC), gRPC 1.65, WebSocket |
-| Cache | Redis 7 (Lettuce) |
-| Observabilidade | Micrometer 1.13, OpenTelemetry, Prometheus, Grafana, Tempo, Loki |
-| Testes | JUnit 5, Testcontainers, ArchUnit, jqwik, Pact, Gatling |
-| Build | Maven 3.9, JIB (Docker sem Dockerfile) |
+### Hexagonal Architecture (Ports & Adapters)
 
-## Como rodar
+```
+adapter-rest  ┐
+adapter-grpc  ├──→ port/inbound  →  application  →  domain
+adapter-ws    ┘         ↑                  ↓
+                   port/outbound ←── adapter-persistence
+                                ←── adapter-kafka
+                                ←── adapter-redis
+```
 
-Pré-requisito: Java 21+, Docker, Make.
+The application layer knows only about Java interfaces (ports). Adapters implement those
+interfaces. The domain knows nothing outside `java.*`. See [ADR-001](docs/adr/ADR-001-hexagonal-architecture.md).
+
+### LMAX Disruptor — Single-Writer Principle
+
+All matching runs on **one thread**. HTTP/gRPC threads publish commands to the Disruptor ring
+buffer; the single `MatchingEventHandler` dequeues them and owns every `OrderBook` exclusively.
+Zero locks in the hot path. I/O (Kafka, PostgreSQL) dispatches to virtual threads off the
+critical path.
+
+```
+[REST thread]  ┐
+[gRPC thread]  ├──→ RingBuffer (4096) ──→ MatchingEventHandler (1 thread)
+[WS thread]    ┘                                    │
+                                       ┌────────────┴────────────┐
+                                  Kafka publish           PostgreSQL write
+                               (virtual thread)          (virtual thread)
+```
+
+See [ADR-003](docs/adr/ADR-003-disruptor-virtual-threads.md).
+
+### Event Sourcing + CQRS
+
+Every state change is persisted as an immutable event before it takes effect. The `OrderBook`
+reconstructs its state by replaying events on startup. The read side (book snapshots, trade
+history) is served from Redis projections, not from live book state.
+
+```sql
+order_events(id, symbol, sequence, event_type, payload JSONB, occurred_at, idempotency_key)
+```
+
+See [ADR-002](docs/adr/ADR-002-event-sourcing-cqrs.md).
+
+### Price Representation (ADR-006)
+
+Prices are stored as `long` ticks and quantities as `long` lots inside the domain. `BigDecimal`
+only appears at REST/gRPC boundaries. This eliminates floating-point rounding in the critical
+path and makes the matching logic trivially testable.
+
+See [ADR-006](docs/adr/ADR-006-long-ticks-bigdecimal.md).
+
+---
+
+## Module Structure
+
+```
+modules/
+├── domain/              # Pure Java — OrderBook, Order, matching logic, domain events
+├── application/         # Use cases, inbound/outbound port interfaces
+├── adapter-rest/        # Spring MVC controllers, DTOs, Swagger/OpenAPI
+├── adapter-grpc/        # gRPC service (PlaceOrder, CancelOrder, StreamBookUpdates)
+├── adapter-ws/          # WebSocket STOMP push (book snapshots every 250ms)
+├── adapter-persistence/ # Spring Data JDBC + Flyway, PostgreSQL event store
+├── adapter-kafka/       # Avro producers (Confluent Schema Registry)
+├── adapter-redis/       # Lettuce client — idempotency store + book snapshot cache
+├── observability/       # Micrometer, OpenTelemetry, structured logging (Logback)
+├── bootstrap/           # @SpringBootApplication, Disruptor wiring, static dashboard
+└── tests-architecture/  # ArchUnit rules — 14 hexagonal boundary checks
+```
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Why |
+|---|---|---|
+| Language | Java 21 | Virtual Threads (Loom), Records, Sealed Interfaces, Pattern Matching |
+| Framework | Spring Boot 3.3 | Auto-configuration, Actuator, dependency injection — kept out of domain |
+| Concurrency | LMAX Disruptor 4 | Lock-free ring buffer; single-writer eliminates synchronization on matching |
+| Concurrency | Virtual Threads (JEP 444) | High-throughput I/O without reactive complexity |
+| Persistence | PostgreSQL 16 + Spring Data JDBC | Append-only event store; JDBC chosen over JPA to avoid lazy-load surprises |
+| Migrations | Flyway 10 | Schema evolution in version control alongside code |
+| Messaging | Apache Kafka 3.7 | At-least-once delivery of trade executions to downstream consumers |
+| Schema | Confluent Avro + Schema Registry | Backwards-compatible schema evolution with compile-time contracts |
+| Cache | Redis 7 (Lettuce) | Sub-millisecond idempotency checks and hot book snapshots |
+| REST | Spring MVC + OpenAPI 3 | Swagger UI at `/swagger-ui.html` |
+| gRPC | grpc-java 1.65 + Spring gRPC | Server-streaming for real-time book updates |
+| WebSocket | Spring WebSocket + STOMP | Push book snapshots to browser dashboard every 250ms |
+| Resilience | Resilience4j | Circuit breaker on external dependencies |
+| Observability | Micrometer + OpenTelemetry | Metrics → Prometheus, Traces → Grafana Tempo |
+| Logging | Logback + Logstash encoder | Structured JSON logs → Grafana Loki |
+| Dashboards | Grafana | Pre-provisioned dashboards: JVM, Kafka lag, matching throughput |
+| Testing | JUnit 5, AssertJ | Unit + integration tests; no Mockito for final/concrete classes |
+| Property tests | jqwik | Randomised invariant verification of OrderBook |
+| Architecture | ArchUnit | Hexagonal boundary violations break `mvn verify` |
+| Integration | Testcontainers | PostgreSQL 16 + Redis 7 — never H2 or in-memory substitutes |
+| Load testing | Gatling | REST scenarios: smoke / steady-state 50 VU / ramp to 200 VU |
+| Benchmarks | JMH | Throughput and latency of the matching hot path |
+| Build | Maven 3.9 (multi-module) | Consistent build lifecycle; JIB for Docker image production |
+| Container | Google JIB | Reproducible Docker images without a Dockerfile |
+| Formatting | Spotless + google-java-format | Enforced on every push via GitHub Actions |
+
+---
+
+## Key Engineering Practices
+
+### Idempotency
+
+Every write operation requires an `Idempotency-Key` UUID header. Duplicate requests return the
+original result without re-processing. Keys are stored in Redis with a 24-hour TTL.
+
+### No Lombok
+
+Records cover immutable value objects. Builders and factory methods (`Order.limitBuy(...)`) cover
+construction. Keeping the code standard Java reduces onboarding friction and IDE configuration
+requirements.
+
+### No `@Transactional` in the Domain or Application Layer
+
+`@Transactional` lives exclusively on the persistence adapter. The application layer is
+framework-agnostic and testable without a Spring context.
+
+### Structured Logging
+
+Every log statement uses key-value pairs (`kv("orderId", id), kv("price", price)`). String
+concatenation is prohibited. TraceId and SpanId propagate via MDC.
+
+### No H2 / Embedded Databases
+
+Integration tests use real PostgreSQL and Redis via Testcontainers. Mock-based tests that passed
+while real tests would have failed are a class of defect this project explicitly avoids.
+
+### ArchUnit — Compile-Time Boundary Enforcement
+
+14 rules check that:
+- Domain classes import nothing outside `java.*` and the domain package
+- Application layer imports nothing from adapters
+- Controllers do not reach into the domain directly (must go through use cases)
+- `@Transactional` is not used in the domain or application layer
+
+A violation fails `mvn verify` and blocks the CI pipeline.
+
+---
+
+## Performance Targets
+
+Measured by JMH (micro-benchmarks) and Gatling (end-to-end load tests):
+
+| Metric | Target |
+|---|---|
+| Matching throughput per symbol | > 100,000 orders/s |
+| Matching latency p50 | < 10 µs |
+| Matching latency p99 | < 100 µs |
+| REST submit p99 (steady 50 VU) | < 5 ms |
+| gRPC submit p99 | < 2 ms |
+| REST error rate at peak | < 0.1% |
+
+Run benchmarks: `make bench`  
+Run load test (requires running instance): `make load`
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Java 21+
+- Docker + Docker Compose
+- GNU Make
+
+### Run Locally
 
 ```bash
-# 1. Subir a infraestrutura local (Postgres, Redis, Kafka, Observabilidade)
+# 1. Start all infrastructure (PostgreSQL, Redis, Kafka, Grafana stack)
 make infra-up
 
-# 2. Rodar migrations
-make db-migrate
+# 2. Compile and install all modules
+./mvnw install -DskipTests
 
-# 3. Subir a aplicação
+# 3. Start the application
 make run
 ```
 
-Endpoints disponíveis após o startup:
+### Endpoints
 
 | Endpoint | URL |
-|----------|-----|
+|---|---|
+| Trading Dashboard | http://localhost:8080 |
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | Health | http://localhost:8080/actuator/health |
-| Métricas (Prometheus) | http://localhost:8080/actuator/prometheus |
-| gRPC | localhost:9090 |
-| Grafana | http://localhost:3000 (admin/admin) |
+| Prometheus metrics | http://localhost:8080/actuator/prometheus |
+| gRPC | localhost:9091 |
+| Grafana | http://localhost:3000 (admin / admin) |
 
-## Estrutura do repositório
+### Place an Order (curl)
 
+```bash
+# Limit buy: 100 units of PETR4 at R$ 38.50
+curl -X POST http://localhost:8080/api/v1/orders \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{"symbol":"PETR4","side":"BUY","type":"LIMIT","price":38.50,"quantity":100}'
+
+# Market sell: 50 units of PETR4
+curl -X POST http://localhost:8080/api/v1/orders \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{"symbol":"PETR4","side":"SELL","type":"MARKET","quantity":50}'
+
+# Get book snapshot
+curl http://localhost:8080/api/v1/books/PETR4
+
+# Cancel an order
+curl -X DELETE http://localhost:8080/api/v1/orders/{orderId} \
+  -H "Idempotency-Key: $(uuidgen)"
 ```
-athena/
-├── modules/
-│   ├── domain/             # Java puro — zero frameworks
-│   ├── application/        # Casos de uso, portas (inbound/outbound)
-│   ├── adapter-rest/       # Spring MVC controllers
-│   ├── adapter-grpc/       # gRPC service implementations
-│   ├── adapter-ws/         # WebSocket handlers
-│   ├── adapter-persistence/# Spring Data JDBC repositories
-│   ├── adapter-kafka/      # Producers e consumers Kafka
-│   ├── adapter-redis/      # Cache e projeções Redis
-│   ├── observability/      # Micrometer, OTel, logging config
-│   ├── bootstrap/          # @SpringBootApplication — monta tudo
-│   └── tests-architecture/ # ArchUnit — regras de dependência
-├── docs/adr/               # Architecture Decision Records
-├── ops/                    # Configurações Prometheus, Tempo, Loki, Grafana
-├── scripts/                # smoke.sh, etc.
-└── docker-compose.yml      # Stack local completa
+
+### Run Tests
+
+```bash
+# Unit tests only (fast, no Docker needed)
+./mvnw test
+
+# Unit + integration tests (requires Docker for Testcontainers)
+make verify
+
+# Architecture tests only
+./mvnw test -pl modules/tests-architecture
+
+# JMH benchmarks
+make bench
 ```
 
-## Performance
+---
 
-Targets medidos por JMH e Gatling (Sprint 5+):
+## IntelliJ IDEA Setup
 
-| Métrica | Target |
-|---------|--------|
-| Throughput por símbolo | > 100.000 ordens/s |
-| Latência p50 (matching) | < 10 µs |
-| Latência p99 (matching) | < 100 µs |
-| Latência p99 (REST submit) | < 5 ms |
-| Latência p99 (gRPC submit) | < 2 ms |
+1. Open the project root as a Maven project.
+2. Run `./mvnw generate-sources compile -DskipTests` once to generate Avro and Protobuf sources.
+3. In IntelliJ: **Maven → Reload All Maven Projects**.
+4. Mark generated source roots if IntelliJ does not pick them up automatically:
+   - `modules/adapter-kafka/target/generated-sources/avro`
+   - `modules/adapter-grpc/target/generated-sources/protobuf/java`
+5. Use JDK 21 (not 22+) for local builds to keep Spotless formatting checks consistent with CI.
 
-## Decisões de design
+---
 
-| ADR | Decisão |
-|-----|---------|
-| [ADR-001](docs/adr/ADR-001-hexagonal-architecture.md) | Arquitetura Hexagonal (Ports & Adapters) |
+## Observability
+
+Start the full stack with `make infra-up`. Pre-provisioned Grafana dashboards at
+`http://localhost:3000`:
+
+| Dashboard | What it shows |
+|---|---|
+| JVM / Spring Boot | Heap, GC, thread pool, HTTP latency histograms |
+| Matching Engine | Ring buffer fill, orders/s, trade rate, p99 matching latency |
+| Kafka | Consumer lag, producer throughput, topic partition health |
+| Distributed Traces | End-to-end request trace from HTTP → Disruptor → Kafka |
+
+Logs are shipped to Loki in JSON format and queryable via Grafana Explore.
+
+---
+
+## Architecture Decision Records
+
+| ADR | Decision |
+|---|---|
+| [ADR-001](docs/adr/ADR-001-hexagonal-architecture.md) | Hexagonal Architecture (Ports & Adapters) |
 | [ADR-002](docs/adr/ADR-002-event-sourcing-cqrs.md) | Event Sourcing + CQRS |
 | [ADR-003](docs/adr/ADR-003-disruptor-virtual-threads.md) | LMAX Disruptor + Virtual Threads |
-| [ADR-006](docs/adr/ADR-006-long-ticks-bigdecimal.md) | `long` ticks no core, `BigDecimal` na borda |
+| [ADR-006](docs/adr/ADR-006-long-ticks-bigdecimal.md) | `long` ticks in domain, `BigDecimal` at REST/gRPC boundary |
+| [ADR-007](docs/adr/ADR-007-observability-strategy.md) | Observability strategy (Micrometer, OTel, Loki) |
 
-## Roadmap
+---
 
-| Sprint | Tema | Status |
-|--------|------|--------|
-| 1 — Foundation | Maven multi-módulo, Docker stack, ArchUnit, CI | Em andamento |
-| 2 — Domain Core | OrderBook, MatchingService, OrderSide/Type, Event Sourcing | Planejado |
-| 3 — REST + Persistence | Submit order, book snapshot, Flyway migrations | Planejado |
-| 4 — Kafka + gRPC | Event publishing, Market Data stream, gRPC service | Planejado |
-| 5 — Performance | Disruptor pipeline, JMH benchmarks, Gatling load test | Planejado |
-| 6 — Observabilidade | Dashboards Grafana, alertas, SLO definitions | Planejado |
+## Makefile Targets
 
-## Licença
+```
+make infra-up     Start all Docker services (DB, Redis, Kafka, Grafana)
+make infra-down   Stop all Docker services
+make run          Start the Spring Boot application
+make verify       Full build + unit tests + integration tests
+make bench        Run JMH benchmarks (domain module)
+make load         Run Gatling load test (requires running instance)
+make fmt          Apply code formatting (Spotless)
+make lint         Check formatting without applying changes
+```
+
+---
+
+## License
 
 [MIT](LICENSE)

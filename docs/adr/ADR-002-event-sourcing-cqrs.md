@@ -43,7 +43,7 @@ Idempotência garantida por `Idempotency-Key` em todo command: o mesmo key retor
 - Queries ad-hoc em estado atual requerem projeções prévias — não é possível fazer `SELECT * WHERE price > X` no estado corrente sem materializar.
 
 ### Neutras / a observar
-- Snapshots periódicos do book serão necessários quando o log de eventos crescer (Sprint 4+).
+- Snapshots periódicos do book serão necessários quando o log de eventos crescer (planned improvement).
 - Compensating events (vs. soft deletes) para cancelamentos — mesma complexidade.
 
 ## Alternativas consideradas

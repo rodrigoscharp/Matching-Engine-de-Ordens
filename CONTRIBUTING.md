@@ -1,5 +1,19 @@
 # Contributing
 
+## IDE Setup (IntelliJ IDEA)
+
+1. Open the project root as a Maven project (File → Open → select `pom.xml`).
+2. Run `./mvnw generate-sources compile -DskipTests` once to generate Avro and Protobuf sources.
+3. **Maven → Reload All Maven Projects** to let IntelliJ pick up generated source roots.
+4. If red code persists in `adapter-kafka` or `adapter-grpc`, right-click the target directories
+   and mark them as "Generated Sources Root":
+   - `modules/adapter-kafka/target/generated-sources/avro`
+   - `modules/adapter-grpc/target/generated-sources/protobuf/java`
+5. Use **JDK 21** for local builds. JDK 22+ skips the Spotless formatting step (see Maven profile
+   `skip-spotless-jdk22plus`) and will diverge from CI output.
+
+---
+
 ## Conventional Commits
 
 Todos os commits em inglês, formato `type(scope): description`.

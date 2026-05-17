@@ -17,7 +17,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Wires the application layer with its outbound ports and exposes the inbound use-case ports.
  *
- * <p><b>Sprint 5:</b> {@link com.athena.engine.DisruptorMatchingEngine} is a {@code @Component}
+ * <p><p>Production: {@link com.athena.engine.DisruptorMatchingEngine} is a {@code @Component}
  * that implements all three inbound ports ({@link PlaceOrderUseCase}, {@link CancelOrderUseCase},
  * {@link GetBookSnapshotUseCase}). Because it is registered by component-scan before these
  * {@code @ConditionalOnMissingBean} fallbacks are evaluated, the Disruptor engine is always the

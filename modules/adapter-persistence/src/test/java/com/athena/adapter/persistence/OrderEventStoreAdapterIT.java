@@ -37,7 +37,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Integration test for the persistence adapter. Uses a real PostgreSQL 16 via Testcontainers —
- * never H2 or any embedded database (per CLAUDE.md).
+ * never H2 or any embedded database.
  */
 @DataJdbcTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)

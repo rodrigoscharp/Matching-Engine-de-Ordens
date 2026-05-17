@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
  * + PostgreSQL. Append-only — no updates or deletes.
  *
  * <p>The {@code @Transactional} annotation is on the adapter (infrastructure layer), NOT on the
- * domain or application service — this is intentional per CLAUDE.md.
+ * domain or application service — keeping transaction management at the infrastructure boundary.
  */
 @Repository
 public class OrderEventStoreAdapter implements OrderEventStore {

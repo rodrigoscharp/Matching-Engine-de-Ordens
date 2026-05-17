@@ -30,8 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * persistence → event publication.
  *
  * <p><b>Thread safety</b>: The idempotency check uses a thread-safe map; the OrderBook per symbol
- * is accessed exclusively by the matching thread (single-writer principle, ADR-003). In Sprint 5,
- * this service will be replaced by a Disruptor event processor.
+ * is accessed exclusively by the matching thread (single-writer principle, ADR-003). The
+ * {@link com.athena.engine.DisruptorMatchingEngine} supersedes this service in production.
  *
  * <p><b>Persistence and Kafka</b>: injected as outbound ports — no direct dependency on Spring or
  * infrastructure. The application layer only knows about interfaces.

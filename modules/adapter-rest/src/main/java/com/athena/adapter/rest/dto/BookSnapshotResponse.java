@@ -10,8 +10,8 @@ import java.util.List;
  * REST representation of an order book snapshot. Prices and quantities are converted from
  * ticks/lots back to human-readable BigDecimal at this boundary (ADR-006).
  *
- * <p>Conversion uses a fixed tick multiplier of 100 (2 decimal places). Sprint 4 will use
- * instrument-specific tick/lot sizes.
+ * <p>Conversion uses a fixed tick multiplier of 100 (2 decimal places). Instrument-specific
+ * tick/lot sizes are not yet implemented.
  */
 public record BookSnapshotResponse(
     String symbol, List<PriceLevelResponse> bids, List<PriceLevelResponse> asks, Instant takenAt) {

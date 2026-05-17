@@ -133,7 +133,7 @@ public final class OrderBook {
             price -> {
               ArrayDeque<Order> queue = side.get(price.ticks());
               if (queue != null) {
-                queue.remove(order); // O(n) — acceptable for Sprint 2; lazy-removal in Sprint 5
+                queue.remove(order); // O(n) — acceptable for current load; lazy-removal planned
                 if (queue.isEmpty()) {
                   side.remove(price.ticks());
                 }

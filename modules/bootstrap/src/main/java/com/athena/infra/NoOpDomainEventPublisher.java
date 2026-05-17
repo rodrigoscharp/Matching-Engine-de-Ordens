@@ -13,6 +13,6 @@ public class NoOpDomainEventPublisher implements DomainEventPublisher {
 
   @Override
   public void publish(List<OrderEvent> events) {
-    // Sprint 4: publish to Kafka via outbox pattern
+    
   }
 }

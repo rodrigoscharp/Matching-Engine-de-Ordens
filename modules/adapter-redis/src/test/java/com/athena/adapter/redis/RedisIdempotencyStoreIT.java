@@ -19,7 +19,7 @@ import org.testcontainers.utility.DockerImageName;
 
 /**
  * Integration test for the Redis idempotency store. Uses a real Redis 7 via Testcontainers —
- * never an embedded or in-memory substitute (per CLAUDE.md).
+ * never an embedded or in-memory substitute.
  *
  * <p>Skipped automatically when Docker is not available.
  */

@@ -13,7 +13,7 @@ import java.math.BigDecimal;
  * BigDecimal — the controller converts them to ticks/lots (ADR-006).
  *
  * <p>{@code price} is required for LIMIT orders and ignored for MARKET orders. Validated to 2
- * decimal places; instruments with different precision will use instrument config in Sprint 4.
+ * decimal places; instrument-specific precision is not yet implemented.
  */
 public record PlaceOrderRequest(
     @NotBlank String symbol,

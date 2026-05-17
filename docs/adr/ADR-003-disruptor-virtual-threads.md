@@ -43,13 +43,13 @@ REST/gRPC/WS → [ring buffer] → MatchingEventProcessor (1 thread, pinned)
 ## Consequências
 
 ### Positivas
-- Throughput medido em lab: >500k ordens/s por símbolo (objetivo Sprint 5: >100k/s).
+- Throughput medido em lab: >500k ordens/s por símbolo (benchmark target: >100k/s).
 - Latência p99 < 100µs no hot path (sem I/O).
 - Sem locks no caminho crítico → sem thread starvation, sem priority inversion.
 - Virtual Threads eliminam complexidade reativa sem sacrificar escala de I/O.
 
 ### Negativas / trade-offs
-- Single-writer implica que um único símbolo com traffic muito alto pode saturar o thread de matching. Solução: sharding por símbolo (Sprint 4+).
+- Single-writer implica que um único símbolo com traffic muito alto pode saturar o thread de matching. Solução: sharding por símbolo (planned improvement).
 - O Disruptor é uma dependência especializada que a maioria dos desenvolvedores Java desconhece — curva de aprendizado documentada no CONTRIBUTING.
 - Não há como usar `@Transactional` no event processor — consistência garantida por outbox pattern.
 

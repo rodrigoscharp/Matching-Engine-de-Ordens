@@ -74,7 +74,7 @@ Todo estado do `OrderBook` deriva de eventos imutáveis persistidos na tabela `o
 order_events(id, symbol, sequence, event_type, payload JSONB, occurred_at, idempotency_key)
 ```
 
-No startup, o engine faz replay de todos os eventos para reconstruir o estado em memória. Para performance, snapshots periódicos evitam replay completo (Sprint 4+).
+No startup, o engine faz replay de todos os eventos para reconstruir o estado em memória. Para performance, snapshots periódicos evitam replay completo (melhoria planejada).
 
 ## Single-Writer Principle (Disruptor)
 

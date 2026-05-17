@@ -10,7 +10,7 @@ import java.util.List;
  * WebSocket message payload pushed to {@code /topic/books/{symbol}}.
  *
  * <p>Prices are converted from ticks to BigDecimal (2dp) at this adapter boundary — ADR-006. The
- * tick multiplier is 100 (1 BRL = 100 ticks); Sprint 8 will use instrument-specific tick sizes.
+ * tick multiplier is 100 (1 BRL = 100 ticks); instrument-specific tick sizes are not yet implemented.
  */
 public record BookUpdateMessage(
     String symbol, List<Level> bids, List<Level> asks, Instant takenAt) {

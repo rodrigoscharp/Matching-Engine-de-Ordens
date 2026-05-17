@@ -29,7 +29,7 @@ import java.util.UUID;
  *   <li><b>Ramp</b>: 0 → 200 users over 30s, then hold for 60s — finds the saturation point
  * </ul>
  *
- * <h3>Performance targets (Sprint 5)</h3>
+ * <h3>Performance targets</h3>
  * <ul>
  *   <li>p99 response time &lt; 5ms at 1 000 req/s
  *   <li>Error rate &lt; 0.1%

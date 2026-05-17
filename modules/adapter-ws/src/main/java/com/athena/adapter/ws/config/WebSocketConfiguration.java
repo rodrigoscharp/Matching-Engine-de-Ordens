@@ -30,7 +30,7 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
   public void configureMessageBroker(MessageBrokerRegistry registry) {
     // In-memory broker for topic subscriptions
     registry.enableSimpleBroker("/topic");
-    // Client-to-server messages use /app prefix (not used yet — read-only streaming for Sprint 7)
+    // Client-to-server messages use /app prefix (reserved for future order submission via WS)
     registry.setApplicationDestinationPrefixes("/app");
   }
 

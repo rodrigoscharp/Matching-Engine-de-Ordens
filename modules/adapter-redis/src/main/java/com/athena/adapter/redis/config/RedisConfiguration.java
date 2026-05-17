@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
  * basic String operations.
  *
  * <p>Additional configuration (custom serializers, connection pool tuning, Sentinel/Cluster mode)
- * should be added here in Sprint 6.
+ * should be added here as needed.
  */
 @Configuration
 public class RedisConfiguration {

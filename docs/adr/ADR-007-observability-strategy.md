@@ -48,7 +48,7 @@ Os requisitos são:
 
 ### Neutras / a observar
 - Em produção, usar sampling 10% para traces (não 100%) — modificar `TRACING_SAMPLING_PROBABILITY` via env var
-- Alertas com Alertmanager requerem configuração adicional de receivers (Slack, PagerDuty) — Sprint 6+
+- Alertas com Alertmanager requerem configuração adicional de receivers (Slack, PagerDuty) — not yet implemented
 
 ## Alternativas consideradas
 

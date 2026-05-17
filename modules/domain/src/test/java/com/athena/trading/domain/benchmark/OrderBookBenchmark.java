@@ -31,7 +31,7 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
  *
  * <p>Run via: {@code ./mvnw -pl modules/domain test -Pbenchmark} (see Makefile: {@code make bench})
  *
- * <p>Target performance (Sprint 5): &gt;100 000 orders/s per symbol, p99 &lt; 100 µs.
+ * <p>Target: &gt;100 000 orders/s per symbol, p99 &lt; 100 µs.
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)

@@ -196,7 +196,7 @@ class LayerDependencyTest {
   void adapters_must_not_depend_on_domain_directly_bypassing_application() {
     // Adapters are allowed to depend on domain value objects (read-only),
     // but must route all mutations through the application layer.
-    // This rule is intentionally lenient for Sprint 1; tighten in Sprint 3.
+    // Controllers may use domain value objects (read-only); mutations must go through the application layer.
     ArchRule rule =
         noClasses()
             .that()

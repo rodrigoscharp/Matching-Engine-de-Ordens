@@ -32,15 +32,15 @@ import org.springframework.web.server.ResponseStatusException;
  * the same key is safe — the original result is returned without re-processing.
  *
  * <p>Prices are accepted as BigDecimal and converted to ticks internally (ADR-006). The current
- * multiplier is 100 (2 decimal places, e.g., BRL cents). Sprint 4 introduces instrument-specific
- * tick sizes.
+ * multiplier is 100 (2 decimal places, e.g., BRL cents). Instrument-specific tick sizes are not
+ * yet implemented.
  */
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "Orders", description = "Order lifecycle — place and cancel")
 public class PlaceOrderController {
 
-  // 1 BRL = 100 ticks (2 decimal places). Replace with instrument config in Sprint 4.
+  // 1 BRL = 100 ticks (2 decimal places). Instrument-specific config not yet implemented.
   static final long TICK_MULTIPLIER = 100;
 
   private final PlaceOrderUseCase placeOrderUseCase;
