@@ -1,0 +1,89 @@
+groups:
+  - name: athena.slo
+    interval: 30s
+    rules:
+
+      # ── Latency SLO ─────────────────────────────────────────────────────────────
+      # Alert if the REST API p99 response time exceeds 5ms for 2 minutes
+      - alert: AthenaRestLatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_server_requests_seconds_bucket{
+              uri="/api/v1/orders", method="POST"
+            }[2m])) by (le)
+          ) > 0.005
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "REST p99 latency above 5ms"
+          description: "POST /api/v1/orders p99={{ $value | humanizeDuration }} (SLO: <5ms)"
+
+      # ── Error rate SLO ─────────────────────────────────────────────────────────
+      # Alert if error rate (5xx) exceeds 0.1% over 5 minutes
+      - alert: AthenaErrorRateHigh
+        expr: |
+          sum(rate(http_server_requests_seconds_count{
+            uri=~"/api/v1/.*", status=~"5.."
+          }[5m]))
+          /
+          sum(rate(http_server_requests_seconds_count{
+            uri=~"/api/v1/.*"
+          }[5m])) > 0.001
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Error rate above SLO"
+          description: "Error rate={{ $value | humanizePercentage }} (SLO: <0.1%)"
+
+      # ── Ring buffer backpressure ─────────────────────────────────────────────────
+      # Alert if the Disruptor ring buffer exceeds 80% utilization for 1 minute
+      - alert: AthenaDisruptorBackpressure
+        expr: |
+          1 - (athena_disruptor_buffer_remaining / athena_disruptor_buffer_capacity) > 0.8
+        for: 1m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Disruptor ring buffer > 80% full"
+          description: "Ring buffer utilization={{ $value | humanizePercentage }} — risk of order timeouts"
+
+      # ── Matching engine down ──────────────────────────────────────────────────────
+      # Alert if no orders are being processed for 1 minute during business hours
+      - alert: AthenaMatchingEngineSilent
+        expr: |
+          sum(rate(athena_orders_accepted_total[5m])) == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "No orders processed in 5 minutes"
+          description: "Matching engine may be down or no clients connected"
+
+  - name: athena.recording
+    interval: 30s
+    rules:
+
+      # Pre-compute aggregated rates for dashboard queries (faster rendering)
+      - record: job:athena_orders_accepted:rate1m
+        expr: sum(rate(athena_orders_accepted_total[1m])) by (symbol)
+
+      - record: job:athena_trades_executed:rate1m
+        expr: sum(rate(athena_trades_executed_total[1m])) by (symbol)
+
+      - record: job:athena_matching_p99:rate1m
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(athena_matching_book_duration_seconds_bucket[1m])) by (le)
+          )
+
+      - record: job:athena_http_errors:rate5m
+        expr: |
+          sum(rate(http_server_requests_seconds_count{
+            uri=~"/api/v1/.*", status=~"[45].."
+          }[5m])) by (uri, status)

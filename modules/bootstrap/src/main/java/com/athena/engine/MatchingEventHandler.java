@@ -12,6 +12,7 @@ import com.athena.trading.domain.Price;
 import com.athena.trading.domain.Quantity;
 import com.athena.trading.domain.Symbol;
 import com.athena.trading.domain.event.OrderEvent;
+import com.athena.trading.domain.event.TradeExecuted;
 import com.lmax.disruptor.EventHandler;
 import java.time.Instant;
 import java.util.HashMap;
@@ -24,6 +25,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 /**
  * The single-writer matching engine. Runs on one dedicated platform thread — no locking needed.
@@ -32,12 +34,13 @@ import org.slf4j.LoggerFactory;
  * For each event:
  * <ol>
  *   <li>Calls {@link OrderBook#place(Order)} or {@link OrderBook#cancel} (in-memory, microseconds)
+ *   <li>Records Micrometer metrics (counters, timer)
  *   <li>Dispatches I/O work (persist + publish + idempotency) to a virtual-thread executor
  *   <li>Completes the caller's {@link java.util.concurrent.CompletableFuture}
  * </ol>
  *
  * <p>The I/O executor uses {@link Executors#newVirtualThreadPerTaskExecutor()} — cheap to park
- * while waiting for Postgres/Kafka/Redis, zero impact on the matching latency.
+ * while waiting for Postgres/Kafka/Redis, zero impact on matching latency.
  */
 final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
 
@@ -52,6 +55,7 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
   private final OrderEventStore eventStore;
   private final DomainEventPublisher eventPublisher;
   private final IdempotencyStore idempotencyStore;
+  private final MatchingMetrics metrics;
 
   // Virtual threads for non-blocking I/O dispatch (ADR-003)
   private final Executor ioExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -59,10 +63,12 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
   MatchingEventHandler(
       OrderEventStore eventStore,
       DomainEventPublisher eventPublisher,
-      IdempotencyStore idempotencyStore) {
+      IdempotencyStore idempotencyStore,
+      MatchingMetrics metrics) {
     this.eventStore = Objects.requireNonNull(eventStore);
     this.eventPublisher = Objects.requireNonNull(eventPublisher);
     this.idempotencyStore = Objects.requireNonNull(idempotencyStore);
+    this.metrics = Objects.requireNonNull(metrics);
   }
 
   @Override
@@ -77,6 +83,7 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
       if (event.placeResult != null) event.placeResult.completeExceptionally(ex);
       if (event.cancelResult != null) event.cancelResult.completeExceptionally(ex);
     } finally {
+      MDC.clear();
       event.clear();
     }
   }
@@ -88,12 +95,36 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
     long seq = book.nextSequence();
     Order order = buildOrder(cmd, seq);
 
+    MDC.put("symbol", symbol.value());
+    MDC.put("orderId", order.orderId().value().toString());
+    MDC.put("side", cmd.side().name());
+
+    // ── Matching (hot path — timed) ────────────────────────────────────────────
+    long start = System.nanoTime();
     List<OrderEvent> domainEvents = book.place(order);
+    long durationNanos = System.nanoTime() - start;
+
+    // ── Metrics ────────────────────────────────────────────────────────────────
+    metrics.recordOrderAccepted(symbol.value(), cmd.side().name(), cmd.type().name());
+    metrics.recordMatchingDuration(durationNanos);
+    domainEvents.stream()
+        .filter(e -> e instanceof TradeExecuted)
+        .map(e -> (TradeExecuted) e)
+        .forEach(
+            t ->
+                metrics.recordTradeExecuted(
+                    symbol.value(), t.executionQuantity().lots()));
+
     snapshotCache.put(symbol, book.snapshot());
+
+    log.debug(
+        "Order matched",
+        /* structured args handled by logstash-logback-encoder */ "trades",
+        domainEvents.stream().filter(e -> e instanceof TradeExecuted).count());
 
     String orderId = order.orderId().value().toString();
 
-    // Dispatch I/O to virtual threads — does not block matching thread
+    // ── I/O — virtual threads ──────────────────────────────────────────────────
     ioExecutor.execute(
         () -> {
           try {
@@ -116,10 +147,14 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
       return;
     }
 
+    MDC.put("symbol", symbol.value());
+    MDC.put("orderId", cmd.orderId());
+
     OrderBook book = books.get(symbol);
     var cancelled = book.cancel(OrderId.of(cmd.orderId()));
     cancelled.ifPresent(
         c -> {
+          metrics.recordOrderCancelled(symbol.value());
           snapshotCache.put(symbol, book.snapshot());
           ioExecutor.execute(
               () -> {
