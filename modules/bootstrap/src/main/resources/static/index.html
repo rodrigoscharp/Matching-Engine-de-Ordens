@@ -9,1206 +9,768 @@
 <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
-  --bg:       #08090E;
-  --s1:       #0F1117;
-  --s2:       #13151E;
-  --s3:       #181B26;
-  --border:   rgba(255,255,255,0.06);
-  --border2:  rgba(255,255,255,0.04);
-  --bid:      #22C55E;
-  --bid-bg:   rgba(34,197,94,0.07);
-  --bid-hi:   rgba(34,197,94,0.16);
-  --ask:      #EF4444;
-  --ask-bg:   rgba(239,68,68,0.07);
-  --ask-hi:   rgba(239,68,68,0.16);
-  --accent:   #6366F1;
-  --acc-bg:   rgba(99,102,241,0.1);
-  --t1: #F1F5F9;
-  --t2: #94A3B8;
-  --t3: #64748B;
-  --t4: #2D3748;
-  --mono: 'JetBrains Mono', monospace;
-  --sans: 'Sora', sans-serif;
-  --r: 8px;
-  --r-sm: 5px;
+  --bg:   #07080D;
+  --s1:   #0D0F18;
+  --s2:   #11141F;
+  --s3:   #161924;
+  --b:    rgba(255,255,255,.055);
+  --b2:   rgba(255,255,255,.03);
+  --bid:  #16A34A;
+  --bidl: #22C55E;
+  --bidbg:rgba(22,163,74,.08);
+  --bidfl:rgba(22,163,74,.22);
+  --ask:  #DC2626;
+  --askl: #EF4444;
+  --askbg:rgba(220,38,38,.08);
+  --askfl:rgba(220,38,38,.22);
+  --acc:  #6366F1;
+  --accb: rgba(99,102,241,.12);
+  --t1:#E8EDF5;--t2:#8898AD;--t3:#4A5568;--t4:#252D3D;
+  --mono:'JetBrains Mono',monospace;
+  --ui:'Sora',sans-serif;
+  --r:6px;
 }
 
-html, body { height: 100%; overflow: hidden; }
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:var(--ui);color:var(--t1);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 
-body {
-  font-family: var(--sans);
-  background: var(--bg);
-  color: var(--t1);
-  display: flex;
-  flex-direction: column;
-  font-size: 13px;
-  -webkit-font-smoothing: antialiased;
+/* ═══ HEADER ═══════════════════════════════════════════════════════ */
+.hdr{
+  height:46px;min-height:46px;
+  background:var(--s1);
+  border-bottom:1px solid var(--b);
+  display:flex;align-items:center;
+  padding:0 18px;gap:0;
+  z-index:20;
+}
+.logo{
+  font-weight:700;font-size:14px;letter-spacing:-.2px;
+  display:flex;align-items:center;gap:8px;
+}
+.logo-mark{
+  width:22px;height:22px;background:var(--acc);
+  border-radius:5px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:#fff;letter-spacing:0;
+}
+.vline{width:1px;height:20px;background:var(--b);margin:0 14px}
+
+.sym-tabs{display:flex;gap:2px}
+.sym-t{
+  font-family:var(--mono);font-size:11px;font-weight:500;
+  padding:5px 12px;border-radius:5px;border:none;
+  background:transparent;color:var(--t3);cursor:pointer;
+  transition:all .15s;letter-spacing:.4px;
+}
+.sym-t:hover{color:var(--t2);background:var(--s3)}
+.sym-t.on{background:var(--s3);color:var(--t1);border:1px solid var(--b)}
+
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:12px}
+.conn{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--t3)}
+.cdot{width:6px;height:6px;border-radius:50%;background:var(--t4);transition:all .4s}
+.cdot.on{background:var(--bidl);box-shadow:0 0 6px rgba(34,197,94,.4)}
+.cdot.off{background:var(--askl)}
+.clk{font-family:var(--mono);font-size:11px;color:var(--t3);letter-spacing:.5px}
+
+/* ═══ WORKSPACE — 3 col ════════════════════════════════════════════ */
+.ws{
+  flex:1;display:grid;
+  grid-template-columns:264px 1fr 296px;
+  min-height:0;overflow:hidden;
 }
 
-/* ── Header ──────────────────────────────────────────────────────── */
-.header {
-  height: 44px;
-  min-height: 44px;
-  background: var(--s1);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  gap: 0;
-  z-index: 10;
+/* ═══ PANEL BASE ════════════════════════════════════════════════════ */
+.pnl{
+  display:flex;flex-direction:column;
+  border-right:1px solid var(--b);
+  min-height:0;overflow:hidden;
+}
+.pnl:last-child{border-right:none}
+
+.ph{
+  height:36px;min-height:36px;
+  display:flex;align-items:center;
+  padding:0 14px;gap:8px;
+  border-bottom:1px solid var(--b2);
+  flex-shrink:0;
+}
+.ptitle{font-size:9.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--t3)}
+.pbadge{
+  font-family:var(--mono);font-size:9px;padding:2px 7px;
+  border-radius:3px;background:var(--s3);color:var(--t3);border:1px solid var(--b);
 }
 
-.logo {
-  font-family: var(--sans);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--t1);
-  letter-spacing: -0.3px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+/* ═══ ORDER BOOK ════════════════════════════════════════════════════ */
+/* Column headers */
+.bk-hdr{
+  display:grid;grid-template-columns:1fr 1fr;
+  padding:0 14px;height:26px;align-items:center;
+  border-bottom:1px solid var(--b2);flex-shrink:0;
 }
-
-.logo-dot {
-  width: 6px; height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: 0 0 6px var(--accent);
+.bk-hdr span{
+  font-family:var(--mono);font-size:9px;letter-spacing:.6px;
+  color:var(--t4);text-align:right;
 }
+.bk-hdr span:first-child{text-align:left}
 
-.header-divider {
-  width: 1px; height: 18px;
-  background: var(--border);
-  margin: 0 16px;
+/* Asks section — fills from bottom */
+.asks-wrap{
+  flex:1;display:flex;flex-direction:column;
+  justify-content:flex-end;overflow:hidden;min-height:0;
 }
-
-.symbol-pills {
-  display: flex;
-  gap: 4px;
+.asks-scroll{
+  overflow-y:auto;display:flex;flex-direction:column;
+  scrollbar-width:none;
 }
+.asks-scroll::-webkit-scrollbar{display:none}
 
-.sym-pill {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 100px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--t3);
-  cursor: pointer;
-  transition: all 0.15s;
-  letter-spacing: 0.3px;
+/* Spread row */
+.spr-row{
+  height:34px;min-height:34px;flex-shrink:0;
+  background:var(--s2);
+  border-top:1px solid var(--b2);border-bottom:1px solid var(--b2);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;
 }
-
-.sym-pill:hover { color: var(--t2); border-color: var(--border); }
-
-.sym-pill.active {
-  background: var(--s3);
-  border-color: var(--border);
-  color: var(--t1);
+.spr-mid{
+  font-family:var(--mono);font-size:15px;font-weight:500;
+  color:var(--t1);letter-spacing:-.3px;
+  transition:color .4s;
 }
+.spr-mid.up{color:var(--bidl)}.spr-mid.dn{color:var(--askl)}
+.spr-info{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
 
-.header-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+/* Bids section */
+.bids-wrap{flex:1;overflow-y:auto;min-height:0;scrollbar-width:none}
+.bids-wrap::-webkit-scrollbar{display:none}
+
+/* Book rows */
+.bk-row{
+  display:grid;grid-template-columns:1fr 1fr;
+  padding:0 14px;height:20px;align-items:center;
+  position:relative;cursor:default;
+  transition:background .1s;
 }
+.bk-row:hover{background:rgba(255,255,255,.02)}
 
-.conn-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--t3);
-  font-family: var(--mono);
+.bk-row .bar{
+  position:absolute;top:0;right:0;height:100%;
+  pointer-events:none;transition:width .2s ease;
 }
+.ask-row .bar{background:var(--askbg)}
+.bid-row .bar{background:var(--bidbg)}
 
-.conn-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--t4);
-  transition: all 0.4s;
+.bk-row .bk-p,.bk-row .bk-s{
+  font-family:var(--mono);font-size:11.5px;
+  text-align:right;position:relative;z-index:1;
 }
-.conn-dot.on  { background: var(--bid); box-shadow: 0 0 5px rgba(34,197,94,0.5); }
-.conn-dot.off { background: var(--ask); }
+.bk-row .bk-p{text-align:left;font-weight:500}
+.ask-row .bk-p{color:var(--askl)}
+.bid-row .bk-p{color:var(--bidl)}
+.bk-row .bk-s{color:var(--t2)}
 
-.header-time {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--t3);
-  letter-spacing: 0.5px;
+@keyframes fask{0%{background:var(--askfl)}100%{background:transparent}}
+@keyframes fbid{0%{background:var(--bidfl)}100%{background:transparent}}
+.fa{animation:fask .35s ease-out}
+.fb{animation:fbid .35s ease-out}
+
+/* ═══ MIDDLE — Stats + Feed ═════════════════════════════════════════ */
+
+/* Stats row */
+.stats-row{
+  display:grid;grid-template-columns:1fr 1fr 1fr 1fr;
+  border-bottom:1px solid var(--b);flex-shrink:0;
 }
-
-/* ── Workspace ────────────────────────────────────────────────────── */
-.workspace {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 300px 280px;
-  overflow: hidden;
-  animation: fade-up 0.35s ease-out;
+.stat{
+  padding:10px 14px;border-right:1px solid var(--b);
+  display:flex;flex-direction:column;gap:3px;
 }
-
-@keyframes fade-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.panel {
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.panel:last-child { border-right: none; }
-
-.panel-head {
-  height: 38px;
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border2);
-  gap: 8px;
-}
-
-.panel-title {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--t3);
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-/* ── Order Book ───────────────────────────────────────────────────── */
-.book-cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0;
-  padding: 0 16px;
-  height: 30px;
-  align-items: center;
-  border-bottom: 1px solid var(--border2);
-  flex-shrink: 0;
-}
-
-.book-col-label {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--t3);
-  text-align: right;
-  letter-spacing: 0.5px;
-}
-
-.book-col-label:first-child { text-align: left; }
-
-.asks-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  overflow: hidden;
-}
-
-.asks-inner {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  scrollbar-width: none;
-}
-
-.asks-inner::-webkit-scrollbar { display: none; }
-
-.bids-section {
-  flex: 1;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.bids-section::-webkit-scrollbar { display: none; }
-
-.book-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  padding: 0 16px;
-  height: 22px;
-  align-items: center;
-  position: relative;
-  cursor: default;
-  transition: background 0.1s;
-}
-
-.book-row:hover { background: rgba(255,255,255,0.025); }
-
-.book-row .depth {
-  position: absolute;
-  top: 0; right: 0;
-  height: 100%;
-  pointer-events: none;
-  transition: width 0.2s ease;
-}
-
-.ask-row .depth { background: var(--ask-bg); }
-.bid-row .depth { background: var(--bid-bg); }
-
-.book-row span {
-  font-family: var(--mono);
-  font-size: 12px;
-  text-align: right;
-}
-
-.book-row .book-price { text-align: left; font-weight: 500; }
-.ask-row .book-price { color: var(--ask); }
-.bid-row .book-price { color: var(--bid); }
-.book-row .book-size  { color: var(--t2); }
-.book-row .book-total { color: var(--t3); }
-
-@keyframes flash-ask {
-  0%   { background: var(--ask-hi); }
-  100% { background: transparent; }
-}
-
-@keyframes flash-bid {
-  0%   { background: var(--bid-hi); }
-  100% { background: transparent; }
-}
-
-.flash-ask { animation: flash-ask 0.4s ease-out; }
-.flash-bid { animation: flash-bid 0.4s ease-out; }
-
-/* ── Spread Bar ────────────────────────────────────────────────────── */
-.spread-bar {
-  height: 32px;
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  background: var(--s2);
-  border-top: 1px solid var(--border2);
-  border-bottom: 1px solid var(--border2);
-  flex-shrink: 0;
-}
-
-.spread-mid {
-  font-family: var(--mono);
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--t1);
-  letter-spacing: -0.3px;
-  transition: color 0.3s;
-}
-
-.spread-mid.up   { color: var(--bid); }
-.spread-mid.down { color: var(--ask); }
-
-.spread-info {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--t3);
-}
-
-.spread-pct {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--t3);
-}
-
-/* ── Middle panel ─────────────────────────────────────────────────── */
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  background: var(--border2);
-  flex-shrink: 0;
-}
-
-.stat-card {
-  background: var(--s1);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.stat-label {
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--t3);
-}
-
-.stat-value {
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--t1);
-  transition: color 0.3s;
-}
-
-.stat-value.green { color: var(--bid); }
-.stat-value.red   { color: var(--ask); }
+.stat:last-child{border-right:none}
+.slbl{font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--t4)}
+.sval{font-family:var(--mono);font-size:13.5px;font-weight:500;color:var(--t1);transition:color .3s}
+.sval.g{color:var(--bidl)}.sval.r{color:var(--askl)}
 
 /* Sparkline */
-.sparkline-wrap {
-  padding: 10px 14px 4px;
-  flex-shrink: 0;
+.spark-wrap{padding:8px 14px 6px;border-bottom:1px solid var(--b);flex-shrink:0}
+.spark-lbl{font-size:8.5px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--t4);margin-bottom:5px}
+#spk{width:100%;height:40px;display:block}
+
+/* Feed */
+.feed-cols{
+  display:grid;grid-template-columns:52px 84px 44px 1fr 72px;
+  padding:0 14px;height:26px;align-items:center;
+  border-bottom:1px solid var(--b);flex-shrink:0;gap:0;
+}
+.feed-cols span{
+  font-size:8.5px;font-weight:600;letter-spacing:.7px;
+  text-transform:uppercase;color:var(--t4);
+  text-align:right;
+}
+.feed-cols span:first-child,.feed-cols span:nth-child(2){text-align:left}
+
+.feed-scroll{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--s3) transparent;min-height:0}
+.feed-scroll::-webkit-scrollbar{width:3px}
+.feed-scroll::-webkit-scrollbar-thumb{background:var(--s3);border-radius:2px}
+
+.feed-empty{
+  height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:10px;
+}
+.feed-empty-ic{font-size:24px;opacity:.15}
+.feed-empty-tx{font-size:11px;color:var(--t4);text-align:center;line-height:1.7}
+
+.fi{
+  display:grid;grid-template-columns:52px 84px 44px 1fr 72px;
+  padding:0 14px;height:28px;align-items:center;
+  border-bottom:1px solid var(--b2);gap:0;
+  animation:fin .2s ease-out;transition:background .1s;
+}
+.fi:hover{background:rgba(255,255,255,.02)}
+@keyframes fin{from{opacity:0;transform:translateX(5px)}to{opacity:1;transform:none}}
+
+.fi span{
+  font-family:var(--mono);font-size:11px;
+  text-align:right;color:var(--t2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.fi .ft{text-align:left;color:var(--t3)}
+.fi .ftp{text-align:left}
+.fi .ftp.trade{color:#F59E0B}
+.fi .ftp.order{color:var(--acc)}
+.fi .fsd.buy{color:var(--bidl)}
+.fi .fsd.sell{color:var(--askl)}
+
+/* ═══ RIGHT — Order Entry ═══════════════════════════════════════════ */
+.order-body{
+  flex:1;padding:14px;display:flex;flex-direction:column;
+  gap:11px;overflow-y:auto;scrollbar-width:none;min-height:0;
+}
+.order-body::-webkit-scrollbar{display:none}
+
+/* BUY / SELL */
+.side-tgl{
+  display:grid;grid-template-columns:1fr 1fr;
+  border-radius:var(--r);overflow:hidden;
+  border:1px solid var(--b);background:var(--bg);
+}
+.sb{
+  padding:10px;border:none;background:transparent;
+  font-family:var(--ui);font-size:12px;font-weight:600;
+  cursor:pointer;color:var(--t3);transition:all .2s;letter-spacing:.2px;
+}
+.sb.buy.on{
+  background:rgba(22,163,74,.14);color:var(--bidl);
+  box-shadow:inset 0 0 0 1px rgba(22,163,74,.25);
+}
+.sb.sell.on{
+  background:rgba(220,38,38,.14);color:var(--askl);
+  box-shadow:inset 0 0 0 1px rgba(220,38,38,.25);
 }
 
-.sparkline-label {
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--t4);
-  margin-bottom: 6px;
+/* LIMIT / MARKET */
+.type-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tb{
+  padding:7px;border:1px solid var(--b);border-radius:5px;
+  background:transparent;font-family:var(--ui);font-size:11px;
+  font-weight:500;cursor:pointer;color:var(--t3);transition:all .15s;
+}
+.tb.on{border-color:rgba(99,102,241,.35);background:var(--accb);color:var(--acc)}
+
+/* Form fields */
+.fld{display:flex;flex-direction:column;gap:5px}
+.flbl{font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--t3)}
+
+.frow{
+  display:flex;align-items:stretch;
+  background:var(--bg);border:1px solid var(--b);
+  border-radius:5px;overflow:hidden;transition:border-color .15s;
+}
+.frow:focus-within{border-color:rgba(99,102,241,.35)}
+
+.finp{
+  flex:1;padding:9px 10px;background:transparent;border:none;
+  outline:none;font-family:var(--mono);font-size:13px;
+  color:var(--t1);min-width:0;
+}
+.finp::placeholder{color:var(--t4)}
+.finp:disabled{opacity:.3}
+.fstep{
+  padding:0 10px;border:none;background:transparent;
+  color:var(--t3);font-size:16px;cursor:pointer;
+  display:flex;align-items:center;transition:color .1s;
+}
+.fstep:hover{color:var(--t1)}
+.fsep{width:1px;background:var(--b);flex-shrink:0}
+.funit{
+  padding:0 10px;font-family:var(--mono);font-size:9.5px;
+  color:var(--t3);display:flex;align-items:center;
+  border-left:1px solid var(--b);white-space:nowrap;
 }
 
-#sparkline {
-  width: 100%;
-  height: 36px;
-  display: block;
+.est{
+  font-family:var(--mono);font-size:10.5px;
+  color:var(--t3);text-align:right;padding:1px 0;
 }
 
-/* Order entry */
-.order-form {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  flex: 1;
-  scrollbar-width: none;
+.submit{
+  padding:12px;border:none;border-radius:var(--r);
+  font-family:var(--ui);font-size:12.5px;font-weight:600;
+  cursor:pointer;letter-spacing:.2px;transition:all .2s;
+  position:relative;overflow:hidden;
 }
-
-.order-form::-webkit-scrollbar { display: none; }
-
-.side-toggle {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-radius: var(--r);
-  border: 1px solid var(--border);
-  overflow: hidden;
-  background: var(--bg);
+.submit::after{
+  content:'';position:absolute;inset:0;
+  background:rgba(255,255,255,.1);opacity:0;transition:opacity .2s;
 }
+.submit:hover::after{opacity:1}
+.submit:active{transform:scale(.98)}
+.submit.buy{background:linear-gradient(135deg,#15803D,#22C55E);color:#fff}
+.submit.sell{background:linear-gradient(135deg,#B91C1C,#EF4444);color:#fff}
+.submit:disabled{opacity:.4;cursor:not-allowed;transform:none}
 
-.side-btn {
-  padding: 9px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  color: var(--t3);
-  transition: all 0.2s;
+.fb-msg{
+  font-family:var(--mono);font-size:10px;
+  padding:8px 10px;border-radius:5px;line-height:1.5;
 }
+.fb-msg.ok{background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.2);color:var(--bidl)}
+.fb-msg.err{background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.2);color:var(--askl)}
 
-.side-btn.buy.on  {
-  background: rgba(34,197,94,0.12);
-  color: var(--bid);
-  box-shadow: inset 0 0 0 1px rgba(34,197,94,0.2);
-}
-
-.side-btn.sell.on {
-  background: rgba(239,68,68,0.12);
-  color: var(--ask);
-  box-shadow: inset 0 0 0 1px rgba(239,68,68,0.2);
-}
-
-.type-seg {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.type-btn {
-  padding: 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: transparent;
-  cursor: pointer;
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--t3);
-  transition: all 0.15s;
-}
-
-.type-btn.on {
-  border-color: rgba(99,102,241,0.4);
-  background: var(--acc-bg);
-  color: var(--accent);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.field-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
-  color: var(--t3);
-}
-
-.field-row {
-  display: flex;
-  align-items: center;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  overflow: hidden;
-  transition: border-color 0.15s;
-}
-
-.field-row:focus-within {
-  border-color: rgba(99,102,241,0.4);
-  background: rgba(99,102,241,0.03);
-}
-
-.field-input {
-  flex: 1;
-  padding: 8px 10px;
-  background: transparent;
-  border: none;
-  outline: none;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--t1);
-  min-width: 0;
-}
-
-.field-input::placeholder { color: var(--t4); }
-.field-input:disabled { opacity: 0.3; }
-
-.field-step {
-  padding: 0 10px;
-  height: 100%;
-  border: none;
-  background: transparent;
-  color: var(--t3);
-  font-size: 14px;
-  cursor: pointer;
-  transition: color 0.1s;
-  display: flex;
-  align-items: center;
-  border-left: 1px solid var(--border2);
-}
-
-.field-step:hover { color: var(--t1); }
-
-.field-unit {
-  padding: 0 10px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--t3);
-  border-left: 1px solid var(--border2);
-}
-
-.est-value {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--t3);
-  text-align: right;
-  padding: 2px 0;
-}
-
-.submit-btn {
-  padding: 11px;
-  border: none;
-  border-radius: var(--r);
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  letter-spacing: 0.2px;
-  transition: all 0.2s;
-  position: relative;
-  overflow: hidden;
-}
-
-.submit-btn::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(255,255,255,0.1);
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.submit-btn:hover::after { opacity: 1; }
-.submit-btn:active { transform: scale(0.98); }
-
-.submit-btn.buy-mode {
-  background: linear-gradient(135deg, #16A34A, #22C55E);
-  color: #fff;
-}
-
-.submit-btn.sell-mode {
-  background: linear-gradient(135deg, #DC2626, #EF4444);
-  color: #fff;
-}
-
-.submit-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.order-feedback {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  padding: 8px 10px;
-  border-radius: var(--r-sm);
-  line-height: 1.5;
-  word-break: break-all;
-}
-
-.order-feedback.ok {
-  background: rgba(34,197,94,0.08);
-  border: 1px solid rgba(34,197,94,0.2);
-  color: var(--bid);
-}
-
-.order-feedback.err {
-  background: rgba(239,68,68,0.08);
-  border: 1px solid rgba(239,68,68,0.2);
-  color: var(--ask);
-}
-
-/* ── Feed panel ──────────────────────────────────────────────────── */
-.feed-list {
-  flex: 1;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--s3) transparent;
-}
-
-.feed-list::-webkit-scrollbar { width: 3px; }
-.feed-list::-webkit-scrollbar-thumb { background: var(--s3); border-radius: 2px; }
-
-.feed-empty {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--t4);
-}
-
-.feed-empty-icon {
-  font-size: 28px;
-  opacity: 0.3;
-}
-
-.feed-empty-text {
-  font-size: 11px;
-  color: var(--t4);
-  text-align: center;
-  line-height: 1.6;
-}
-
-.feed-head-row {
-  display: grid;
-  grid-template-columns: 54px 1fr 36px 80px 70px;
-  padding: 0 12px;
-  height: 28px;
-  align-items: center;
-  border-bottom: 1px solid var(--border2);
-  gap: 8px;
-}
-
-.feed-head-row span {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--t4);
-  text-align: right;
-}
-
-.feed-head-row span:first-child { text-align: left; }
-
-.feed-item {
-  display: grid;
-  grid-template-columns: 54px 1fr 36px 80px 70px;
-  padding: 0 12px;
-  height: 30px;
-  align-items: center;
-  border-bottom: 1px solid var(--border2);
-  gap: 8px;
-  animation: item-in 0.2s ease-out;
-  transition: background 0.1s;
-}
-
-.feed-item:hover { background: rgba(255,255,255,0.02); }
-
-@keyframes item-in {
-  from { opacity: 0; transform: translateX(6px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-.feed-item span {
-  font-family: var(--mono);
-  font-size: 11px;
-  text-align: right;
-  color: var(--t2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.feed-item .f-time { text-align: left; color: var(--t3); }
-.feed-item .f-type { text-align: left; }
-.feed-item .f-type.trade { color: #F59E0B; }
-.feed-item .f-type.placed { color: var(--accent); }
-.feed-item .f-side.buy   { color: var(--bid); }
-.feed-item .f-side.sell  { color: var(--ask); }
-
-/* ── Book empty state ────────────────────────────────────────────── */
-.book-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--t4);
-  font-size: 11px;
-  font-family: var(--mono);
-  letter-spacing: 0.5px;
+/* empty book */
+.bk-empty{
+  display:flex;align-items:center;justify-content:center;
+  height:40px;font-family:var(--mono);font-size:10px;color:var(--t4);
 }
 </style>
 </head>
 <body>
 
-<!-- Header -->
-<header class="header">
+<!-- ═══ HEADER ════════════════════════════════════════════════════ -->
+<header class="hdr">
   <div class="logo">
-    <div class="logo-dot"></div>
+    <div class="logo-mark">A</div>
     Athena
   </div>
-  <div class="header-divider"></div>
-  <div class="symbol-pills" id="symPills">
-    <button class="sym-pill active" onclick="selectSym('PETR4',this)">PETR4</button>
-    <button class="sym-pill" onclick="selectSym('VALE3',this)">VALE3</button>
-    <button class="sym-pill" onclick="selectSym('ITUB4',this)">ITUB4</button>
-    <button class="sym-pill" onclick="selectSym('BBDC4',this)">BBDC4</button>
+  <div class="vline"></div>
+  <div class="sym-tabs">
+    <button class="sym-t on" onclick="selectSym('PETR4',this)">PETR4</button>
+    <button class="sym-t"   onclick="selectSym('VALE3',this)">VALE3</button>
+    <button class="sym-t"   onclick="selectSym('ITUB4',this)">ITUB4</button>
+    <button class="sym-t"   onclick="selectSym('BBDC4',this)">BBDC4</button>
   </div>
-  <div class="header-right">
-    <div class="conn-indicator">
-      <div class="conn-dot" id="cDot"></div>
-      <span id="cLabel">—</span>
-    </div>
-    <div class="header-divider"></div>
-    <div class="header-time" id="clock">--:--:--</div>
+  <div class="hdr-r">
+    <div class="conn"><div class="cdot" id="cdot"></div><span id="clbl">—</span></div>
+    <div class="vline"></div>
+    <div class="clk" id="clk">--:--:--</div>
   </div>
 </header>
 
-<!-- Workspace -->
-<div class="workspace">
+<!-- ═══ WORKSPACE ════════════════════════════════════════════════ -->
+<div class="ws">
 
-  <!-- ── Order Book ──────────────────────────────────── -->
-  <div class="panel">
-    <div class="panel-head">
-      <span class="panel-title">Order Book</span>
-      <span id="bookSym" style="font-family:var(--mono);font-size:10.5px;color:var(--accent);margin-left:auto">PETR4</span>
-      <span id="bookTs" style="font-family:var(--mono);font-size:9.5px;color:var(--t4)"></span>
+  <!-- ── Order Book (left 264px) ──────────────────────────── -->
+  <div class="pnl">
+    <div class="ph">
+      <span class="ptitle">Book</span>
+      <span class="pbadge" id="bkSym">PETR4</span>
+      <span id="bkTs" style="font-family:var(--mono);font-size:9px;color:var(--t4);margin-left:auto"></span>
     </div>
 
-    <!-- Column labels -->
-    <div class="book-cols">
-      <span class="book-col-label" style="text-align:left">PRICE</span>
-      <span class="book-col-label">SIZE</span>
-      <span class="book-col-label">TOTAL</span>
+    <div class="bk-hdr">
+      <span style="text-align:left">PRICE</span>
+      <span>SIZE</span>
     </div>
 
-    <!-- Asks (above spread) -->
-    <div class="asks-section" id="asksSection">
-      <div class="asks-inner" id="asksInner">
-        <div class="book-empty">Aguardando…</div>
+    <!-- Asks: rendered ascending → column-reverse shows lowest at bottom -->
+    <div class="asks-wrap">
+      <div class="asks-scroll" id="asksEl">
+        <div class="bk-empty">Aguardando…</div>
       </div>
     </div>
 
-    <!-- Spread bar -->
-    <div class="spread-bar">
-      <span class="spread-info" id="spreadInfo">SPREAD</span>
-      <span class="spread-mid" id="midPrice">—</span>
-      <span class="spread-pct" id="spreadPct"></span>
+    <!-- Spread -->
+    <div class="spr-row">
+      <span class="spr-info" id="sprInfo">SPREAD —</span>
+      <span class="spr-mid" id="midPx">—</span>
     </div>
 
-    <!-- Bids (below spread) -->
-    <div class="bids-section" id="bidsSection">
-      <div class="book-empty" id="bidsPlaceholder">Aguardando…</div>
+    <!-- Bids: highest at top, nearest spread -->
+    <div class="bids-wrap" id="bidsEl">
+      <div class="bk-empty">Aguardando…</div>
     </div>
   </div>
 
-  <!-- ── Middle: Stats + Order Entry ────────────────── -->
-  <div class="panel">
-    <div class="panel-head">
-      <span class="panel-title">Mercado</span>
-    </div>
+  <!-- ── Middle: Stats + Feed (flex 1) ────────────────────── -->
+  <div class="pnl">
 
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Melhor Bid</div>
-        <div class="stat-value green" id="sBid">—</div>
+    <!-- Stats row -->
+    <div class="stats-row">
+      <div class="stat">
+        <div class="slbl">Best Bid</div>
+        <div class="sval g" id="sBid">—</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Melhor Ask</div>
-        <div class="stat-value red" id="sAsk">—</div>
+      <div class="stat">
+        <div class="slbl">Best Ask</div>
+        <div class="sval r" id="sAsk">—</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Spread</div>
-        <div class="stat-value" id="sSpread">—</div>
+      <div class="stat">
+        <div class="slbl">Spread</div>
+        <div class="sval" id="sSpread">—</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Níveis</div>
-        <div class="stat-value" id="sLevels">—</div>
+      <div class="stat">
+        <div class="slbl">Níveis</div>
+        <div class="sval" id="sLvl">—</div>
       </div>
     </div>
 
     <!-- Sparkline -->
-    <div class="sparkline-wrap">
-      <div class="sparkline-label">Mid Price — últimos 30 ticks</div>
-      <svg id="sparkline" viewBox="0 0 272 36" preserveAspectRatio="none">
-        <text x="50%" y="55%" text-anchor="middle" fill="#2D3748" font-size="9" font-family="Sora">Aguardando dados…</text>
+    <div class="spark-wrap">
+      <div class="spark-lbl">Mid Price — últimos 30 ticks</div>
+      <svg id="spk" viewBox="0 0 600 40" preserveAspectRatio="none">
+        <text x="50%" y="58%" text-anchor="middle" fill="#252D3D"
+          font-size="10" font-family="Sora,sans-serif">Aguardando dados…</text>
       </svg>
     </div>
 
-    <!-- Separator -->
-    <div style="border-top:1px solid var(--border2); margin:0"></div>
-
-    <!-- Order entry form -->
-    <div class="panel-head" style="border-bottom:none; padding-top:10px">
-      <span class="panel-title">Nova Ordem</span>
+    <!-- Feed header -->
+    <div class="ph" style="border-top:1px solid var(--b)">
+      <span class="ptitle">Atividade</span>
+      <span id="feedBadge" style="font-family:var(--mono);font-size:9px;color:var(--t4);margin-left:auto">0 eventos</span>
     </div>
 
-    <div class="order-form">
-      <!-- Side -->
-      <div class="side-toggle">
-        <button class="side-btn buy on" id="btnBuy" onclick="setSide('BUY')">Compra</button>
-        <button class="side-btn sell"   id="btnSell" onclick="setSide('SELL')">Venda</button>
-      </div>
-
-      <!-- Type -->
-      <div class="type-seg">
-        <button class="type-btn on" id="tLimit"  onclick="setType('LIMIT')">Limite</button>
-        <button class="type-btn"    id="tMarket" onclick="setType('MARKET')">Mercado</button>
-      </div>
-
-      <!-- Price -->
-      <div class="field" id="priceField">
-        <div class="field-label">Preço</div>
-        <div class="field-row">
-          <button class="field-step" onclick="stepPrice(-0.01)" style="border-left:none;border-right:1px solid var(--border2)">−</button>
-          <input class="field-input" id="fPrice" type="number" step="0.01" min="0.01" placeholder="0.00" oninput="updateEst()">
-          <div class="field-unit">BRL</div>
-        </div>
-      </div>
-
-      <!-- Qty -->
-      <div class="field">
-        <div class="field-label">Quantidade</div>
-        <div class="field-row">
-          <button class="field-step" onclick="stepQty(-1)" style="border-left:none;border-right:1px solid var(--border2)">−</button>
-          <input class="field-input" id="fQty" type="number" step="1" min="1" value="100" placeholder="100" oninput="updateEst()">
-          <button class="field-step" onclick="stepQty(1)">+</button>
-          <div class="field-unit">lots</div>
-        </div>
-      </div>
-
-      <!-- Estimated value -->
-      <div class="est-value" id="estValue">Valor estimado: —</div>
-
-      <!-- Submit -->
-      <button class="submit-btn buy-mode" id="submitBtn" onclick="placeOrder()">
-        Comprar PETR4
-      </button>
-
-      <!-- Feedback -->
-      <div id="feedback" style="display:none" class="order-feedback"></div>
-    </div>
-  </div>
-
-  <!-- ── Right: Activity Feed ────────────────────────── -->
-  <div class="panel" style="border-right:none">
-    <div class="panel-head">
-      <span class="panel-title">Atividade</span>
-      <span id="feedBadge" style="font-family:var(--mono);font-size:9.5px;color:var(--t4);margin-left:auto">0 eventos</span>
-    </div>
-
-    <div class="feed-head-row">
+    <!-- Feed column labels -->
+    <div class="feed-cols">
       <span>Hora</span>
       <span>Tipo</span>
       <span>Side</span>
       <span>Preço</span>
-      <span>Qty</span>
+      <span>Qtd</span>
     </div>
 
-    <div class="feed-list" id="feedList">
+    <!-- Feed rows -->
+    <div class="feed-scroll" id="feedEl">
       <div class="feed-empty">
-        <div class="feed-empty-icon">◎</div>
-        <div class="feed-empty-text">Nenhuma atividade ainda.<br>Coloque uma ordem para começar.</div>
+        <div class="feed-empty-ic">◎</div>
+        <div class="feed-empty-tx">Nenhuma atividade ainda.<br>Coloque uma ordem para começar.</div>
       </div>
     </div>
   </div>
 
-</div>
+  <!-- ── Order Entry (right 296px) ────────────────────────── -->
+  <div class="pnl">
+    <div class="ph">
+      <span class="ptitle">Nova Ordem</span>
+    </div>
+
+    <div class="order-body">
+
+      <!-- BUY / SELL -->
+      <div class="side-tgl">
+        <button class="sb buy on" id="btnBuy"  onclick="setSide('BUY')">Comprar</button>
+        <button class="sb sell"   id="btnSell" onclick="setSide('SELL')">Vender</button>
+      </div>
+
+      <!-- LIMIT / MARKET -->
+      <div class="type-seg">
+        <button class="tb on" id="tLmt" onclick="setType('LIMIT')">Limite</button>
+        <button class="tb"    id="tMkt" onclick="setType('MARKET')">Mercado</button>
+      </div>
+
+      <!-- Price -->
+      <div class="fld" id="priceFld">
+        <div class="flbl">Preço</div>
+        <div class="frow">
+          <button class="fstep" onclick="stepP(-0.01)" style="border-right:1px solid var(--b)">−</button>
+          <input class="finp" id="fPx" type="number" step="0.01" min="0.01"
+                 placeholder="0,00" oninput="updEst()">
+          <div class="funit">BRL</div>
+        </div>
+      </div>
+
+      <!-- Quantity -->
+      <div class="fld">
+        <div class="flbl">Quantidade</div>
+        <div class="frow">
+          <button class="fstep" onclick="stepQ(-10)" style="border-right:1px solid var(--b)">−</button>
+          <input class="finp" id="fQy" type="number" step="1" min="1"
+                 value="100" placeholder="100" oninput="updEst()">
+          <button class="fstep" onclick="stepQ(10)" style="border-left:1px solid var(--b)">+</button>
+          <div class="funit">lots</div>
+        </div>
+      </div>
+
+      <!-- Estimated value -->
+      <div class="est" id="estV">Estimado: —</div>
+
+      <!-- Submit -->
+      <button class="submit buy" id="subBtn" onclick="placeOrder()">
+        Comprar PETR4
+      </button>
+
+      <!-- Feedback -->
+      <div id="fbMsg" class="fb-msg" style="display:none"></div>
+
+    </div>
+  </div>
+
+</div><!-- /ws -->
 
 <script>
-// ── State ────────────────────────────────────────────────────
-let sym = 'PETR4';
-let side = 'BUY';
-let type = 'LIMIT';
-let stomp = null;
-let subs = {};
-let feed = [];
-let midHistory = [];
-let prevBook = { bids: {}, asks: {} };
-let lastMid = null;
+/* ── State ───────────────────────────────────────────────── */
+let sym='PETR4',side='BUY',type='LIMIT';
+let stomp=null,subs={},feed=[],midHist=[],lastMid=null;
+let prevBids={},prevAsks={};
 
-// ── Clock ────────────────────────────────────────────────────
-const clockEl = document.getElementById('clock');
-function tick() {
-  clockEl.textContent = new Date().toLocaleTimeString('pt-BR',{hour12:false});
-}
-tick(); setInterval(tick, 1000);
+/* ── Clock ───────────────────────────────────────────────── */
+function tick(){document.getElementById('clk').textContent=new Date().toLocaleTimeString('pt-BR',{hour12:false})}
+tick();setInterval(tick,1000);
 
-// ── Symbol ───────────────────────────────────────────────────
-function selectSym(s, btn) {
-  sym = s;
-  document.querySelectorAll('.sym-pill').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('bookSym').textContent = s;
-  updateSubmitBtn();
-  fetchBook();
-  if (stomp?.connected) subscribeSym(s);
+/* ── Symbol ──────────────────────────────────────────────── */
+function selectSym(s,btn){
+  sym=s;
+  document.querySelectorAll('.sym-t').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('bkSym').textContent=s;
+  updBtn();fetchBook();
+  if(stomp?.connected)subSym(s);
 }
 
-// ── Side / Type ───────────────────────────────────────────────
-function setSide(s) {
-  side = s;
-  document.getElementById('btnBuy').className  = `side-btn buy${s==='BUY'?' on':''}`;
-  document.getElementById('btnSell').className = `side-btn sell${s==='SELL'?' on':''}`;
-  updateSubmitBtn();
+/* ── Side / Type ─────────────────────────────────────────── */
+function setSide(s){
+  side=s;
+  document.getElementById('btnBuy').className ='sb buy'+(s==='BUY'?' on':'');
+  document.getElementById('btnSell').className='sb sell'+(s==='SELL'?' on':'');
+  updBtn();
+}
+function setType(t){
+  type=t;
+  document.getElementById('tLmt').className='tb'+(t==='LIMIT'?' on':'');
+  document.getElementById('tMkt').className='tb'+(t==='MARKET'?' on':'');
+  const el=document.getElementById('fPx');
+  el.disabled=t==='MARKET';
+  document.getElementById('priceFld').style.opacity=t==='MARKET'?'0.35':'1';
+  updEst();
+}
+function updBtn(){
+  const b=document.getElementById('subBtn');
+  b.className='submit '+(side==='BUY'?'buy':'sell');
+  b.textContent=(side==='BUY'?'Comprar ':'Vender ')+sym;
+}
+function stepP(d){
+  const e=document.getElementById('fPx');
+  e.value=Math.max(0.01,(parseFloat(e.value)||0)+d).toFixed(2);updEst();
+}
+function stepQ(d){
+  const e=document.getElementById('fQy');
+  e.value=Math.max(1,(parseInt(e.value)||0)+d);updEst();
+}
+function updEst(){
+  const p=parseFloat(document.getElementById('fPx').value)||0;
+  const q=parseInt(document.getElementById('fQy').value)||0;
+  const el=document.getElementById('estV');
+  el.textContent=(p>0&&q>0&&type==='LIMIT')
+    ?`Estimado: R$ ${fmt(p*q)}`
+    :'Estimado: —';
 }
 
-function setType(t) {
-  type = t;
-  document.getElementById('tLimit').className  = `type-btn${t==='LIMIT'?' on':''}`;
-  document.getElementById('tMarket').className = `type-btn${t==='MARKET'?' on':''}`;
-  const priceField = document.getElementById('fPrice');
-  priceField.disabled = t==='MARKET';
-  document.getElementById('priceField').style.opacity = t==='MARKET' ? '0.4' : '1';
-  updateEst();
-}
-
-function updateSubmitBtn() {
-  const btn = document.getElementById('submitBtn');
-  btn.className = `submit-btn ${side==='BUY'?'buy':'sell'}-mode`;
-  btn.textContent = `${side==='BUY'?'Comprar':'Vender'} ${sym}`;
-}
-
-function stepPrice(d) {
-  const el = document.getElementById('fPrice');
-  el.value = Math.max(0.01, (parseFloat(el.value)||0) + d).toFixed(2);
-  updateEst();
-}
-
-function stepQty(d) {
-  const el = document.getElementById('fQty');
-  el.value = Math.max(1, parseInt(el.value||0) + d);
-  updateEst();
-}
-
-function updateEst() {
-  const p = parseFloat(document.getElementById('fPrice').value) || 0;
-  const q = parseInt(document.getElementById('fQty').value) || 0;
-  const el = document.getElementById('estValue');
-  if (p > 0 && q > 0 && type === 'LIMIT') {
-    el.textContent = `Valor estimado: R$ ${fmt(p*q)}`;
-  } else {
-    el.textContent = 'Valor estimado: —';
-  }
-}
-
-// ── WebSocket ─────────────────────────────────────────────────
-function connect() {
-  const dot = document.getElementById('cDot');
-  const lbl = document.getElementById('cLabel');
-  stomp = new StompJs.Client({
-    webSocketFactory: () => new SockJS('/ws'),
-    reconnectDelay: 3000,
-    onConnect: () => {
-      dot.className = 'conn-dot on';
-      lbl.textContent = 'LIVE';
-      subscribeSym(sym);
-    },
-    onDisconnect: () => {
-      dot.className = 'conn-dot off';
-      lbl.textContent = 'OFFLINE';
-    }
+/* ── WebSocket ───────────────────────────────────────────── */
+function connect(){
+  const dot=document.getElementById('cdot'),lbl=document.getElementById('clbl');
+  stomp=new StompJs.Client({
+    webSocketFactory:()=>new SockJS('/ws'),
+    reconnectDelay:3000,
+    onConnect:()=>{dot.className='cdot on';lbl.textContent='AO VIVO';subSym(sym)},
+    onDisconnect:()=>{dot.className='cdot off';lbl.textContent='OFFLINE'}
   });
   stomp.activate();
 }
-
-function subscribeSym(s) {
-  if (subs[s]) return;
-  subs[s] = stomp.subscribe(`/topic/books/${s}`, msg => {
-    const d = JSON.parse(msg.body);
-    if (d.symbol === sym) renderBook(d);
+function subSym(s){
+  if(subs[s])return;
+  subs[s]=stomp.subscribe(`/topic/books/${s}`,msg=>{
+    const d=JSON.parse(msg.body);
+    if(d.symbol===sym)renderBook(d);
   });
 }
 
-// ── REST polling ──────────────────────────────────────────────
-function fetchBook() {
+/* ── REST polling ────────────────────────────────────────── */
+function fetchBook(){
   fetch(`/api/v1/books/${sym}`)
     .then(r=>r.json())
-    .then(d=>{ if(d.symbol===sym) renderBook(d); })
+    .then(d=>{if(d.symbol===sym)renderBook(d);})
     .catch(()=>{});
 }
-fetchBook();
-setInterval(fetchBook, 1000);
+fetchBook();setInterval(fetchBook,1200);
 
-// ── Format helpers ────────────────────────────────────────────
-function fmt(n, dec=2) {
-  return Number(n).toLocaleString('pt-BR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
-}
-function fmtQ(n) { return Number(n).toLocaleString('pt-BR'); }
+/* ── Format ──────────────────────────────────────────────── */
+function fmt(n,d=2){return Number(n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtQ(n){return Number(n).toLocaleString('pt-BR')}
 
-// ── Render book ───────────────────────────────────────────────
-function renderBook(data) {
-  const bids = (data.bids||[]).slice(0,15);
-  const asks = (data.asks||[]).slice(0,15);
+/* ── Render Book ─────────────────────────────────────────── */
+function renderBook(data){
+  const bids=(data.bids||[]).slice(0,15);
+  const asks=(data.asks||[]).slice(0,15);
 
   // Stats
-  const bestBid = bids[0]?.price;
-  const bestAsk = asks[0]?.price;
-  document.getElementById('sBid').textContent = bestBid ? fmt(bestBid) : '—';
-  document.getElementById('sAsk').textContent = bestAsk ? fmt(bestAsk) : '—';
-  document.getElementById('sLevels').textContent = `${bids.length}B / ${asks.length}A`;
+  const bb=bids[0]?.price,ba=asks[0]?.price;
+  document.getElementById('sBid').textContent=bb?fmt(bb):'—';
+  document.getElementById('sAsk').textContent=ba?fmt(ba):'—';
+  document.getElementById('sLvl').textContent=`${bids.length}B/${asks.length}A`;
 
   // Spread + mid
-  const midEl = document.getElementById('midPrice');
-  const spreadEl = document.getElementById('sSpread');
-  if (bestBid && bestAsk) {
-    const spread = (Number(bestAsk) - Number(bestBid));
-    const mid = (Number(bestBid) + Number(bestAsk)) / 2;
-    spreadEl.textContent = fmt(spread);
-    document.getElementById('spreadInfo').textContent = `Spread ${fmt(spread)}`;
-    const spreadPct = (spread/mid*100).toFixed(3);
-    document.getElementById('spreadPct').textContent = `${spreadPct}%`;
-
-    // Mid price direction
-    if (lastMid !== null) {
-      midEl.className = `spread-mid ${mid > lastMid ? 'up' : mid < lastMid ? 'down' : ''}`;
-    }
-    midEl.textContent = fmt(mid);
-    lastMid = mid;
-
-    // Sparkline
-    midHistory.push(mid);
-    if (midHistory.length > 30) midHistory.shift();
-    drawSparkline();
+  const midEl=document.getElementById('midPx');
+  if(bb&&ba){
+    const sp=Number(ba)-Number(bb);
+    const mid=(Number(bb)+Number(ba))/2;
+    document.getElementById('sSpread').textContent=fmt(sp);
+    document.getElementById('sprInfo').textContent=`SPREAD ${fmt(sp)}`;
+    if(lastMid!==null)midEl.className='spr-mid '+(mid>lastMid?'up':mid<lastMid?'dn':'');
+    midEl.textContent=fmt(mid);lastMid=mid;
+    midHist.push(mid);if(midHist.length>30)midHist.shift();
+    drawSpk();
   }
 
-  // Timestamp
-  if (data.takenAt) {
-    const ts = new Date(data.takenAt);
-    document.getElementById('bookTs').textContent =
+  if(data.takenAt){
+    const ts=new Date(data.takenAt);
+    document.getElementById('bkTs').textContent=
       ts.toLocaleTimeString('pt-BR',{hour12:false,fractionalSecondDigits:1});
   }
 
-  // Max qty for depth bars
-  const all = [...bids,...asks].map(l=>Number(l.totalQuantity));
-  const maxQ = all.length ? Math.max(...all) : 1;
+  const all=[...bids,...asks].map(l=>Number(l.totalQuantity));
+  const mx=all.length?Math.max(...all):1;
 
-  // Render asks (ascending price, but we want lowest at BOTTOM near spread)
-  // So we render in ascending order and the container uses flex-end to push to bottom
-  const asksInner = document.getElementById('asksInner');
-  if (!asks.length) {
-    asksInner.innerHTML = '<div class="book-empty">—</div>';
+  /* Asks: sort ascending, column-reverse container puts lowest at bottom */
+  const asksEl=document.getElementById('asksEl');
+  if(!asks.length){
+    asksEl.innerHTML='<div class="bk-empty">—</div>';
   } else {
-    // Sort ascending, lowest ask will be at end of DOM → flex-end makes it closest to spread
-    const sorted = [...asks].sort((a,b) => Number(a.price)-Number(b.price));
-    asksInner.innerHTML = sorted.map(l => {
-      const pKey = l.price.toString();
-      const changed = prevBook.asks[pKey] !== undefined && prevBook.asks[pKey] !== l.totalQuantity.toString();
-      const pct = (Number(l.totalQuantity)/maxQ*100).toFixed(1);
-      return `<div class="book-row ask-row${changed?' flash-ask':''}">
-        <div class="depth" style="width:${pct}%"></div>
-        <span class="book-price">${fmt(l.price)}</span>
-        <span class="book-size">${fmtQ(l.totalQuantity)}</span>
-        <span class="book-total">${fmtQ(l.totalQuantity)}</span>
+    const sorted=[...asks].sort((a,b)=>Number(a.price)-Number(b.price));
+    asksEl.innerHTML=sorted.map(l=>{
+      const key=String(l.price);
+      const flash=prevAsks[key]!==undefined&&prevAsks[key]!==String(l.totalQuantity);
+      const pct=(Number(l.totalQuantity)/mx*100).toFixed(1);
+      return `<div class="bk-row ask-row${flash?' fa':''}">
+        <div class="bar" style="width:${pct}%"></div>
+        <span class="bk-p">${fmt(l.price)}</span>
+        <span class="bk-s">${fmtQ(l.totalQuantity)}</span>
       </div>`;
     }).join('');
   }
-  prevBook.asks = {};
-  asks.forEach(l=>{ prevBook.asks[l.price.toString()] = l.totalQuantity.toString(); });
+  prevAsks={};asks.forEach(l=>{prevAsks[String(l.price)]=String(l.totalQuantity)});
 
-  // Render bids (descending — highest bid nearest spread)
-  const bidsSection = document.getElementById('bidsSection');
-  if (!bids.length) {
-    bidsSection.innerHTML = '<div class="book-empty" id="bidsPlaceholder">—</div>';
+  /* Bids: descending — highest at top = nearest spread */
+  const bidsEl=document.getElementById('bidsEl');
+  if(!bids.length){
+    bidsEl.innerHTML='<div class="bk-empty">—</div>';
   } else {
-    bidsSection.innerHTML = bids.map(l => {
-      const pKey = l.price.toString();
-      const changed = prevBook.bids[pKey] !== undefined && prevBook.bids[pKey] !== l.totalQuantity.toString();
-      const pct = (Number(l.totalQuantity)/maxQ*100).toFixed(1);
-      return `<div class="book-row bid-row${changed?' flash-bid':''}">
-        <div class="depth" style="width:${pct}%"></div>
-        <span class="book-price">${fmt(l.price)}</span>
-        <span class="book-size">${fmtQ(l.totalQuantity)}</span>
-        <span class="book-total">${fmtQ(l.totalQuantity)}</span>
+    bidsEl.innerHTML=bids.map(l=>{
+      const key=String(l.price);
+      const flash=prevBids[key]!==undefined&&prevBids[key]!==String(l.totalQuantity);
+      const pct=(Number(l.totalQuantity)/mx*100).toFixed(1);
+      return `<div class="bk-row bid-row${flash?' fb':''}">
+        <div class="bar" style="width:${pct}%"></div>
+        <span class="bk-p">${fmt(l.price)}</span>
+        <span class="bk-s">${fmtQ(l.totalQuantity)}</span>
       </div>`;
     }).join('');
   }
-  prevBook.bids = {};
-  bids.forEach(l=>{ prevBook.bids[l.price.toString()] = l.totalQuantity.toString(); });
+  prevBids={};bids.forEach(l=>{prevBids[String(l.price)]=String(l.totalQuantity)});
 }
 
-// ── Sparkline ─────────────────────────────────────────────────
-function drawSparkline() {
-  const svg = document.getElementById('sparkline');
-  if (midHistory.length < 2) return;
-
-  const W = 272, H = 36, PAD = 2;
-  const min = Math.min(...midHistory);
-  const max = Math.max(...midHistory);
-  const range = max - min || 0.01;
-
-  const pts = midHistory.map((v,i) => {
-    const x = PAD + (i/(midHistory.length-1))*(W-PAD*2);
-    const y = PAD + (1-(v-min)/range)*(H-PAD*2);
+/* ── Sparkline ───────────────────────────────────────────── */
+function drawSpk(){
+  const svg=document.getElementById('spk');
+  if(midHist.length<2)return;
+  const W=600,H=40,P=2;
+  const mn=Math.min(...midHist),mx=Math.max(...midHist),rng=mx-mn||.01;
+  const pts=midHist.map((v,i)=>{
+    const x=P+(i/(midHist.length-1))*(W-P*2);
+    const y=P+(1-(v-mn)/rng)*(H-P*2);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
-
-  const last = midHistory[midHistory.length-1];
-  const first = midHistory[0];
-  const isUp = last >= first;
-  const color = isUp ? '#22C55E' : '#EF4444';
-  const fillColor = isUp ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
-
-  // Fill path
-  const fillPts = [
-    `${PAD},${H}`,
-    ...midHistory.map((v,i)=>{
-      const x = PAD + (i/(midHistory.length-1))*(W-PAD*2);
-      const y = PAD + (1-(v-min)/range)*(H-PAD*2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }),
-    `${W-PAD},${H}`
-  ].join(' ');
-
-  svg.innerHTML = `
-    <polygon points="${fillPts}" fill="${fillColor}" />
-    <polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
-    <circle cx="${pts[pts.length-1].split(',')[0]}" cy="${pts[pts.length-1].split(',')[1]}" r="2.5" fill="${color}"/>
-  `;
+  const isUp=midHist[midHist.length-1]>=midHist[0];
+  const c=isUp?'#22C55E':'#EF4444';
+  const cf=isUp?'rgba(22,163,74,.08)':'rgba(220,38,38,.08)';
+  const fp=[`${P},${H}`,...pts,`${W-P},${H}`].join(' ');
+  const last=pts[pts.length-1].split(',');
+  svg.innerHTML=`
+    <polygon points="${fp}" fill="${cf}"/>
+    <polyline points="${pts.join(' ')}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="3" fill="${c}"/>`;
 }
 
-// ── Place order ───────────────────────────────────────────────
-async function placeOrder() {
-  const btn = document.getElementById('submitBtn');
-  const fb = document.getElementById('feedback');
+/* ── Place Order ─────────────────────────────────────────── */
+async function placeOrder(){
+  const btn=document.getElementById('subBtn');
+  const msg=document.getElementById('fbMsg');
+  const px=document.getElementById('fPx').value;
+  const qy=document.getElementById('fQy').value;
 
-  const price = document.getElementById('fPrice').value;
-  const qty = document.getElementById('fQty').value;
+  if(!qy||Number(qy)<1){showFb('err','Quantidade inválida');return}
+  if(type==='LIMIT'&&(!px||Number(px)<=0)){showFb('err','Preço inválido para ordem Limite');return}
 
-  if (!qty || Number(qty)<1) { showFb('err','Quantidade inválida'); return; }
-  if (type==='LIMIT' && (!price||Number(price)<=0)) { showFb('err','Preço inválido'); return; }
+  btn.disabled=true;btn.textContent='Enviando…';
 
-  btn.disabled = true;
-  btn.textContent = 'Enviando…';
+  const body={symbol:sym,side,type,quantity:qy};
+  if(type==='LIMIT')body.price=px;
 
-  const body = { symbol:sym, side, type, quantity:qty };
-  if (type==='LIMIT') body.price = price;
-
-  try {
-    const r = await fetch('/api/v1/orders', {
+  try{
+    const r=await fetch('/api/v1/orders',{
       method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Idempotency-Key': crypto.randomUUID()
-      },
-      body: JSON.stringify(body)
+      headers:{'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},
+      body:JSON.stringify(body)
     });
-
-    const d = await r.json();
-    if (r.ok) {
-      showFb('ok', `✓ ${d.orderId.substring(0,8)}…`);
-      addFeed({ type:'ORDER_PLACED', side, price: type==='LIMIT'?price:'MKT', qty, sym, id:d.orderId });
+    const d=await r.json();
+    if(r.ok){
+      showFb('ok',`✓ ${d.orderId.slice(0,12)}…`);
+      addFeed({tp:'order',side,price:type==='LIMIT'?px:'MARKET',qty:qy,sym,id:d.orderId});
       fetchBook();
     } else {
-      showFb('err', d.message||d.error||`Erro ${r.status}`);
+      showFb('err',d.message||d.error||`Erro ${r.status}`);
     }
-  } catch(e) {
-    showFb('err','Falha de conexão');
-  }
+  } catch(e){showFb('err','Falha de conexão')}
 
-  btn.disabled = false;
-  updateSubmitBtn();
+  btn.disabled=false;updBtn();
 }
 
-function showFb(cls, msg) {
-  const el = document.getElementById('feedback');
-  el.className = `order-feedback ${cls}`;
-  el.textContent = msg;
-  el.style.display = 'block';
-  if (cls==='ok') setTimeout(()=>{ el.style.display='none'; }, 4000);
+function showFb(cls,txt){
+  const el=document.getElementById('fbMsg');
+  el.className='fb-msg '+cls;el.textContent=txt;el.style.display='block';
+  if(cls==='ok')setTimeout(()=>{el.style.display='none'},4000);
 }
 
-// ── Feed ──────────────────────────────────────────────────────
-function addFeed(item) {
-  feed.unshift({...item, at: new Date()});
-  if (feed.length>200) feed.pop();
+/* ── Feed ────────────────────────────────────────────────── */
+function addFeed(item){
+  feed.unshift({...item,at:new Date()});
+  if(feed.length>200)feed.pop();
   renderFeed();
 }
-
-function renderFeed() {
-  const el = document.getElementById('feedList');
-  document.getElementById('feedBadge').textContent = `${feed.length} eventos`;
-
-  if (!feed.length) {
-    el.innerHTML = `<div class="feed-empty">
-      <div class="feed-empty-icon">◎</div>
-      <div class="feed-empty-text">Nenhuma atividade ainda.<br>Coloque uma ordem para começar.</div>
-    </div>`;
-    return;
+function renderFeed(){
+  const el=document.getElementById('feedEl');
+  document.getElementById('feedBadge').textContent=`${feed.length} eventos`;
+  if(!feed.length){
+    el.innerHTML=`<div class="feed-empty">
+      <div class="feed-empty-ic">◎</div>
+      <div class="feed-empty-tx">Nenhuma atividade ainda.<br>Coloque uma ordem para começar.</div>
+    </div>`;return;
   }
-
-  el.innerHTML = feed.map(f => {
-    const t = f.at.toLocaleTimeString('pt-BR',{hour12:false});
-    const typeCls = f.type==='TRADE_EXECUTED'?'trade':'placed';
-    const typeLabel = f.type==='TRADE_EXECUTED'?'★ Trade':'→ Ordem';
-    const sideCls = f.side==='BUY'?'buy':'sell';
-    const shortId = f.id ? f.id.substring(0,6) : '';
-    return `<div class="feed-item" title="${f.id||''}">
-      <span class="f-time">${t}</span>
-      <span class="f-type ${typeCls}">${typeLabel}</span>
-      <span class="f-side ${sideCls}">${f.side||''}</span>
-      <span class="f-price">${f.price}</span>
-      <span class="f-qty">${fmtQ(f.qty)}</span>
+  el.innerHTML=feed.map(f=>{
+    const t=f.at.toLocaleTimeString('pt-BR',{hour12:false});
+    const tpCls=f.tp==='trade'?'trade':'order';
+    const tpLbl=f.tp==='trade'?'★ Trade':'→ Ordem';
+    const sdCls=f.side==='BUY'?'buy':'sell';
+    return `<div class="fi">
+      <span class="ft">${t}</span>
+      <span class="ftp ${tpCls}">${tpLbl}</span>
+      <span class="fsd ${sdCls}">${f.side||''}</span>
+      <span>${fmt(f.price)}</span>
+      <span>${fmtQ(f.qty)}</span>
     </div>`;
   }).join('');
 }
 
-// ── Boot ──────────────────────────────────────────────────────
-updateSubmitBtn();
-renderFeed();
-connect();
+/* ── Boot ────────────────────────────────────────────────── */
+updBtn();renderFeed();connect();
 </script>
 </body>
 </html>
