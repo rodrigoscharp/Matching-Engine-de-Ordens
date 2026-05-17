@@ -10,6 +10,8 @@ import com.athena.trading.application.port.outbound.IdempotencyStore;
 import com.athena.trading.application.port.outbound.OrderEventStore;
 import com.athena.trading.domain.OrderBookSnapshot;
 import com.athena.trading.domain.Symbol;
+import java.util.HashMap;
+import java.util.Map;
 import com.lmax.disruptor.BlockingWaitStrategy;
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.dsl.Disruptor;
@@ -137,15 +139,22 @@ public class DisruptorMatchingEngine
     return handler.snapshotFor(Symbol.of(symbol));
   }
 
+  @Override
+  public Map<String, OrderBookSnapshot> getAllSnapshots() {
+    Map<String, OrderBookSnapshot> result = new HashMap<>();
+    handler.snapshotCache.forEach((sym, snap) -> result.put(sym.value(), snap));
+    return Map.copyOf(result);
+  }
+
   // ── Health / metrics access ───────────────────────────────────────────────────
 
-  /** Returns ring buffer remaining capacity for health indicator. */
-  long ringBufferRemainingCapacity() {
+  @Override
+  public long ringBufferRemainingCapacity() {
     return ringBuffer != null ? ringBuffer.remainingCapacity() : ringBufferSize;
   }
 
-  /** Returns total ring buffer capacity. */
-  long ringBufferCapacity() {
+  @Override
+  public long ringBufferCapacity() {
     return ringBuffer != null ? ringBuffer.getBufferSize() : ringBufferSize;
   }
 

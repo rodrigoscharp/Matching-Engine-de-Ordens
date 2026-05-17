@@ -152,6 +152,13 @@ public final class TradingApplicationService
     return Optional.ofNullable(books.get(Symbol.of(symbol))).map(OrderBook::snapshot);
   }
 
+  @Override
+  public Map<String, OrderBookSnapshot> getAllSnapshots() {
+    Map<String, OrderBookSnapshot> result = new java.util.HashMap<>();
+    books.forEach((symbol, book) -> result.put(symbol.value(), book.snapshot()));
+    return Map.copyOf(result);
+  }
+
   // Package-private for testing — allows injecting a specific book
   void registerBook(OrderBook book) {
     books.put(book.symbol(), book);

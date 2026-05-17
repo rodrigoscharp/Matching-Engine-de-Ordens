@@ -1,6 +1,7 @@
 package com.athena.trading.application.port.inbound;
 
 import com.athena.trading.domain.OrderBookSnapshot;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -16,4 +17,12 @@ public interface GetBookSnapshotUseCase {
    *     caller should treat this as an empty book, not as an error.
    */
   Optional<OrderBookSnapshot> getSnapshot(String symbol);
+
+  /**
+   * Returns snapshots for all initialized symbols. Used by streaming adapters (WebSocket, gRPC)
+   * to push updates to subscribed clients without knowing which symbols are active.
+   *
+   * @return unmodifiable map of symbol → snapshot; empty if no orders have been placed yet.
+   */
+  Map<String, OrderBookSnapshot> getAllSnapshots();
 }

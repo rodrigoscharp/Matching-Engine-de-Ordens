@@ -60,6 +60,9 @@ spring:
 
 # ── Athena engine configuration ───────────────────────────────────────────────
 athena:
+  ws:
+    # How often (ms) to push order book snapshots to WebSocket and gRPC streaming clients
+    book-push-interval-ms: ${WS_BOOK_PUSH_INTERVAL_MS:250}
   engine:
     # Ring buffer size must be a power of 2 (Disruptor requirement)
     ring-buffer-size: ${ENGINE_RING_BUFFER_SIZE:4096}

@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class RedisIdempotencyStore implements IdempotencyStore {
 
-  static final Duration TTL = Duration.ofHours(24);
+  public static final Duration TTL = Duration.ofHours(24);
   private static final String KEY_PREFIX = "idempotency:";
 
   private final StringRedisTemplate redis;
