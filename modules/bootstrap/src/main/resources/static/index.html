@@ -483,7 +483,8 @@ let sym='PETR4',side='BUY',type='LIMIT';
 let stomp=null,subs={},feed=[],midHist=[],lastMid=null;
 let prevBids={},prevAsks={};
 let mockBooks={};
-let mockTimer=null,mockTick=0,wsLive=false;
+let mockTimer=null,mockTick=0;
+const liveSyms=new Set(); // símbolos com dados reais não-vazios vindos do WS
 const engineStart=Date.now()-7920000; // ~2h 12m ago
 
 /* ══════════════════════════════════════════════════════════════
@@ -557,7 +558,7 @@ function startMock(){
   stopMock();
   mockTick=0;
   mockTimer=setInterval(()=>{
-    if(wsLive)return;
+    if(liveSyms.has(sym))return;
     const book=mockBooks[sym];
     if(!book)return;
     mockTick++;
@@ -690,13 +691,12 @@ function connect(){
     reconnectDelay:5000,
     onConnect:()=>{
       dot.className='cdot on';lbl.textContent='AO VIVO';
-      wsLive=true;
-      document.getElementById('demoBadge').style.display='none';
+      // não para o mock aqui — só para quando chegar dado real não-vazio
       subSym(sym);
     },
     onDisconnect:()=>{
       dot.className='cdot off';lbl.textContent='OFFLINE';
-      wsLive=false;
+      liveSyms.clear(); // todos os símbolos voltam ao mock
       document.getElementById('demoBadge').style.display='';
     }
   });
@@ -706,7 +706,15 @@ function subSym(s){
   if(subs[s])return;
   subs[s]=stomp.subscribe(`/topic/books/${s}`,msg=>{
     const d=JSON.parse(msg.body);
-    if(d.symbol===sym)renderBook(d);
+    if(d.symbol!==sym)return;
+    const hasData=(d.bids&&d.bids.length>0)||(d.asks&&d.asks.length>0);
+    if(hasData){
+      // dados reais chegaram — registra o símbolo e para o mock dele
+      liveSyms.add(d.symbol);
+      document.getElementById('demoBadge').style.display='none';
+      renderBook(d);
+    }
+    // se o book real está vazio, mantém o mock rodando (não chama renderBook)
   });
 }
 
