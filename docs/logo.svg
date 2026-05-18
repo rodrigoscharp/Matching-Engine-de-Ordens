@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Acroterion -->
+  <circle cx="50" cy="10" r="4" fill="#818CF8"/>
+  <line x1="50" y1="14" x2="50" y2="17" stroke="#818CF8" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Pediment (triangular roof) -->
+  <path d="M50 17 L87 45 H13 Z"
+        fill="rgba(99,102,241,0.14)"
+        stroke="#6366F1"
+        stroke-width="2.4"
+        stroke-linejoin="round"/>
+
+  <!-- Entablature (frieze) -->
+  <rect x="13" y="46" width="74" height="7" rx="1.5"
+        fill="#6366F1" opacity="0.78"/>
+
+  <!-- Five Doric columns -->
+  <rect x="16"   y="55" width="7" height="24" rx="1.5" fill="#6366F1" opacity="0.58"/>
+  <rect x="29.5" y="55" width="7" height="24" rx="1.5" fill="#6366F1" opacity="0.58"/>
+  <rect x="46.5" y="55" width="7" height="24" rx="1.5" fill="#6366F1" opacity="0.58"/>
+  <rect x="63.5" y="55" width="7" height="24" rx="1.5" fill="#6366F1" opacity="0.58"/>
+  <rect x="77"   y="55" width="7" height="24" rx="1.5" fill="#6366F1" opacity="0.58"/>
+
+  <!-- Stylobate (three-step base) -->
+  <rect x="11" y="81" width="78" height="5.5" rx="1.5" fill="#6366F1" opacity="0.48"/>
+  <rect x="7"  y="88" width="86" height="4"   rx="1"   fill="#6366F1" opacity="0.28"/>
+  <rect x="3"  y="94" width="94" height="2.5" rx="1"   fill="#6366F1" opacity="0.14"/>
+</svg>

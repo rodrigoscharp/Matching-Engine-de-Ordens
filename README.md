@@ -1,4 +1,37 @@
-# Athena Matching Engine
+<div align="center">
+
+<img src="docs/logo.svg" alt="Athena" width="96" />
+
+<br/><br/>
+
+# ATHENA
+
+**High-performance multi-asset order matching engine**
+
+*Java 21 · Spring Boot 3.3 · Hexagonal Architecture · Event Sourcing · LMAX Disruptor*
+
+<br/>
+
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F?style=flat-square&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Kafka](https://img.shields.io/badge/Kafka-3.7-231F20?style=flat-square&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![License](https://img.shields.io/badge/License-MIT-6366F1?style=flat-square)](LICENSE)
+
+<br/>
+
+[![Architecture](https://img.shields.io/badge/Architecture-Hexagonal%20%2F%20Ports%20%26%20Adapters-818CF8?style=flat-square)](docs/adr/ADR-001-hexagonal-architecture.md)
+[![Concurrency](https://img.shields.io/badge/Concurrency-LMAX%20Disruptor%20%2B%20Virtual%20Threads-818CF8?style=flat-square)](docs/adr/ADR-003-disruptor-virtual-threads.md)
+[![Testing](https://img.shields.io/badge/Tests-ArchUnit%20%7C%20Testcontainers%20%7C%20Gatling-818CF8?style=flat-square)]()
+
+<br/>
+
+[Architecture](#architecture) · [Getting Started](#getting-started) · [Performance](#performance-targets) · [ADRs](#architecture-decision-records) · [Dashboard](#endpoints)
+
+</div>
+
+---
 
 A high-performance, multi-asset order matching engine built with Java 21 and Spring Boot 3.3.
 Designed to demonstrate production-grade engineering practices relevant to fintech backend roles:
