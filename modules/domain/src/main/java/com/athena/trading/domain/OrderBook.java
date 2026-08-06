@@ -102,12 +102,19 @@ public final class OrderBook {
       matchLimit(order, events);
     }
 
-    // Any remaining quantity rests in the book (limit orders only — market remainder is discarded)
     if (order.isOpen() && order.type().isLimit()) {
+      // Limit orders rest at their price until filled or cancelled
       long priceTicks = order.limitPrice().get().ticks();
       NavigableMap<Long, ArrayDeque<Order>> own = order.side().isBuy() ? bids : asks;
       own.computeIfAbsent(priceTicks, k -> new ArrayDeque<>()).offer(order);
       orderIndex.put(order.orderId(), order);
+    } else if (order.isOpen() && order.type().isMarket()) {
+      // A market order never rests, so whatever found no counterparty is killed here. The client
+      // has no other channel to learn this, so it is an event and a terminal state — not a silent
+      // drop that leaves the order looking forever active.
+      Quantity killed = order.remainingQuantity();
+      order.cancel();
+      events.add(new OrderCancelled(order.orderId(), symbol, killed, Instant.now()));
     }
 
     return List.copyOf(events);
