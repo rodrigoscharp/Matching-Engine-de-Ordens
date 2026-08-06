@@ -22,7 +22,12 @@ public class InMemoryIdempotencyStore implements IdempotencyStore {
   }
 
   @Override
-  public void store(String idempotencyKey, OrderId orderId) {
-    store.putIfAbsent(idempotencyKey, orderId);
+  public boolean reserve(String idempotencyKey, OrderId orderId) {
+    return store.putIfAbsent(idempotencyKey, orderId) == null;
+  }
+
+  @Override
+  public void release(String idempotencyKey) {
+    store.remove(idempotencyKey);
   }
 }

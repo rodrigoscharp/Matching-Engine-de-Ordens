@@ -2,7 +2,9 @@ package com.athena.trading.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,7 +45,7 @@ class TradingApplicationServiceTest {
 
   @Test
   void should_place_limit_buy_and_return_order_id_string() {
-    when(idempotencyStore.find("key-1")).thenReturn(Optional.empty());
+    when(idempotencyStore.reserve(eq("key-1"), any())).thenReturn(true);
 
     var cmd = limitBuyCommand("key-1", "PETR4", 100, 50);
     var orderId = service.place(cmd);
@@ -51,7 +53,7 @@ class TradingApplicationServiceTest {
     assertThat(orderId).isNotBlank();
     // UUID format
     assertThat(orderId).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
-    verify(eventStore).append(argThat(events ->
+    verify(eventStore).append(anyLong(), argThat(events ->
         events.stream().anyMatch(e -> e instanceof OrderPlaced)));
     verify(eventPublisher).publish(any());
   }
@@ -59,19 +61,20 @@ class TradingApplicationServiceTest {
   @Test
   void should_return_cached_order_id_string_when_idempotency_key_already_processed() {
     var existingId = OrderId.generate();
+    when(idempotencyStore.reserve(eq("key-dup"), any())).thenReturn(false);
     when(idempotencyStore.find("key-dup")).thenReturn(Optional.of(existingId));
 
     var cmd = limitBuyCommand("key-dup", "PETR4", 100, 50);
     var result = service.place(cmd);
 
     assertThat(result).isEqualTo(existingId.value().toString());
-    verify(eventStore, never()).append(any());
+    verify(eventStore, never()).append(anyLong(), any());
     verify(eventPublisher, never()).publish(any());
   }
 
   @Test
   void should_cancel_resting_order() {
-    when(idempotencyStore.find(any())).thenReturn(Optional.empty());
+    when(idempotencyStore.reserve(any(), any())).thenReturn(true);
     var orderId = service.place(limitBuyCommand("place-key", "VALE3", 50, 100));
 
     var cancelled = service.cancel(new CancelOrderCommand("cancel-key", orderId));
@@ -79,30 +82,32 @@ class TradingApplicationServiceTest {
     assertThat(cancelled).isTrue();
     // eventStore.append is called twice: once for place, once for cancel
     verify(eventStore, atLeastOnce()).append(
+        anyLong(),
         argThat(events -> events.stream().anyMatch(
             e -> e instanceof com.athena.trading.domain.event.OrderCancelled)));
   }
 
   @Test
   void should_return_false_when_cancelling_non_existent_order() {
-    when(idempotencyStore.find(any())).thenReturn(Optional.empty());
+    when(idempotencyStore.reserve(any(), any())).thenReturn(true);
 
     var cancelled = service.cancel(
         new CancelOrderCommand("key", OrderId.generate().toString()));
 
     assertThat(cancelled).isFalse();
-    verify(eventStore, never()).append(any());
+    verify(eventStore, never()).append(anyLong(), any());
   }
 
   @Test
   void should_produce_trades_when_matching_buy_and_sell() {
-    when(idempotencyStore.find(any())).thenReturn(Optional.empty());
+    when(idempotencyStore.reserve(any(), any())).thenReturn(true);
 
     service.place(limitSellCommand("sell-key", "ITUB4", 100, 200));
     service.place(limitBuyCommand("buy-key", "ITUB4", 100, 200));
 
     // The second place call produces OrderPlaced + TradeExecuted events
     verify(eventStore, atLeastOnce()).append(
+        anyLong(),
         argThat(events -> events.stream().anyMatch(
             e -> e instanceof com.athena.trading.domain.event.TradeExecuted)));
   }

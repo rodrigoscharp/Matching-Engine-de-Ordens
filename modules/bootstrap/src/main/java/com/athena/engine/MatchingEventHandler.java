@@ -2,7 +2,6 @@ package com.athena.engine;
 
 import com.athena.trading.application.command.PlaceOrderCommand;
 import com.athena.trading.application.port.outbound.DomainEventPublisher;
-import com.athena.trading.application.port.outbound.IdempotencyStore;
 import com.athena.trading.application.port.outbound.OrderEventStore;
 import com.athena.trading.domain.Order;
 import com.athena.trading.domain.OrderBook;
@@ -11,7 +10,9 @@ import com.athena.trading.domain.OrderId;
 import com.athena.trading.domain.Price;
 import com.athena.trading.domain.Quantity;
 import com.athena.trading.domain.Symbol;
+import com.athena.trading.domain.event.OrderCancelled;
 import com.athena.trading.domain.event.OrderEvent;
+import com.athena.trading.domain.event.OrderPlaced;
 import com.athena.trading.domain.event.TradeExecuted;
 import com.lmax.disruptor.EventHandler;
 import java.time.Instant;
@@ -54,20 +55,21 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
 
   private final OrderEventStore eventStore;
   private final DomainEventPublisher eventPublisher;
-  private final IdempotencyStore idempotencyStore;
   private final MatchingMetrics metrics;
 
   // Virtual threads for non-blocking I/O dispatch (ADR-003)
   private final Executor ioExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
+  // Decision order, stamped on every batch. Owned by the matching thread — the I/O threads that
+  // actually write the rows finish in an order that has nothing to do with this one.
+  private long engineSequence = 0;
+
   MatchingEventHandler(
       OrderEventStore eventStore,
       DomainEventPublisher eventPublisher,
-      IdempotencyStore idempotencyStore,
       MatchingMetrics metrics) {
     this.eventStore = Objects.requireNonNull(eventStore);
     this.eventPublisher = Objects.requireNonNull(eventPublisher);
-    this.idempotencyStore = Objects.requireNonNull(idempotencyStore);
     this.metrics = Objects.requireNonNull(metrics);
   }
 
@@ -93,7 +95,7 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
     Symbol symbol = Symbol.of(cmd.symbol());
     OrderBook book = bookFor(symbol);
     long seq = book.nextSequence();
-    Order order = buildOrder(cmd, seq);
+    Order order = buildOrder(cmd, event.orderId, seq);
 
     MDC.put("symbol", symbol.value());
     MDC.put("orderId", order.orderId().value().toString());
@@ -118,25 +120,43 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
     snapshotCache.put(symbol, book.snapshot());
 
     log.debug(
-        "Order matched",
-        /* structured args handled by logstash-logback-encoder */ "trades",
+        "Order matched — {} trade(s)",
         domainEvents.stream().filter(e -> e instanceof TradeExecuted).count());
 
     String orderId = order.orderId().value().toString();
+    // Captured before the handler returns — onEvent() clears the ring buffer slot in its finally
+    // block, so the lambda below must not read through `event`.
+    var result = event.placeResult;
+    var context = MDC.getCopyOfContextMap();
+    long batchSequence = ++engineSequence;
 
     // ── I/O — virtual threads ──────────────────────────────────────────────────
+    // The matching thread never waits here; only the caller's future does. That keeps the hot
+    // path unblocked while still refusing to acknowledge an order that is not yet durable.
     ioExecutor.execute(
         () -> {
+          if (context != null) MDC.setContextMap(context);
           try {
-            eventStore.append(domainEvents);
-            eventPublisher.publish(domainEvents);
-            idempotencyStore.store(cmd.idempotencyKey(), order.orderId());
+            eventStore.append(batchSequence, domainEvents);
+            result.complete(orderId);
           } catch (Exception ex) {
-            log.error("I/O error persisting order {}", orderId, ex);
+            log.error("Failed to persist order {} — rejecting the submission", orderId, ex);
+            result.completeExceptionally(ex);
+            return;
+          } finally {
+            MDC.clear();
+          }
+          // Publication is best-effort and happens after the ack: the event store is the source
+          // of truth (see KafkaDomainEventPublisher's circuit breaker).
+          try {
+            if (context != null) MDC.setContextMap(context);
+            eventPublisher.publish(domainEvents);
+          } catch (Exception ex) {
+            log.error("Failed to publish events for order {}", orderId, ex);
+          } finally {
+            MDC.clear();
           }
         });
-
-    event.placeResult.complete(orderId);
   }
 
   private void processCancel(OrderCommandEvent event) {
@@ -152,23 +172,101 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
 
     OrderBook book = books.get(symbol);
     var cancelled = book.cancel(OrderId.of(cmd.orderId()));
-    cancelled.ifPresent(
-        c -> {
-          metrics.recordOrderCancelled(symbol.value());
-          snapshotCache.put(symbol, book.snapshot());
-          ioExecutor.execute(
-              () -> {
-                try {
-                  eventStore.append(List.of(c));
-                  eventPublisher.publish(List.of(c));
-                  idempotencyStore.store(cmd.idempotencyKey(), OrderId.of(cmd.orderId()));
-                } catch (Exception ex) {
-                  log.error("I/O error persisting cancel {}", cmd.orderId(), ex);
-                }
-              });
-        });
+    var result = event.cancelResult;
 
-    event.cancelResult.complete(cancelled.isPresent());
+    if (cancelled.isEmpty()) {
+      result.complete(false);
+      return;
+    }
+
+    var cancelEvent = cancelled.get();
+    var orderId = cmd.orderId();
+    var context = MDC.getCopyOfContextMap();
+    long batchSequence = ++engineSequence;
+    metrics.recordOrderCancelled(symbol.value());
+    snapshotCache.put(symbol, book.snapshot());
+
+    ioExecutor.execute(
+        () -> {
+          if (context != null) MDC.setContextMap(context);
+          try {
+            eventStore.append(batchSequence, List.of(cancelEvent));
+            result.complete(true);
+          } catch (Exception ex) {
+            log.error("Failed to persist cancel {} — rejecting the request", orderId, ex);
+            result.completeExceptionally(ex);
+            return;
+          } finally {
+            MDC.clear();
+          }
+          try {
+            if (context != null) MDC.setContextMap(context);
+            eventPublisher.publish(List.of(cancelEvent));
+          } catch (Exception ex) {
+            log.error("Failed to publish cancel for order {}", orderId, ex);
+          } finally {
+            MDC.clear();
+          }
+        });
+  }
+
+  /**
+   * Rebuilds every book from the event log. Called once at startup, before the ring buffer accepts
+   * traffic, so no locking is needed despite touching the same state the matching thread owns.
+   *
+   * <p>Only the commands are replayed — {@link OrderPlaced} and {@link OrderCancelled}. Trades are
+   * <em>derived</em> facts: feeding them back in would double-count. Re-running the same commands
+   * through the same deterministic matcher reproduces the same trades, which is the property that
+   * makes this log a source of truth rather than a diary.
+   *
+   * @return the number of commands replayed
+   */
+  int replay(List<OrderEvent> log, long lastEngineSequence) {
+    engineSequence = lastEngineSequence;
+    int applied = 0;
+    for (OrderEvent event : log) {
+      switch (event) {
+        case OrderPlaced placed -> {
+          OrderBook book = bookFor(placed.symbol());
+          book.place(rebuildOrder(placed, book.nextSequence()));
+          applied++;
+        }
+        case OrderCancelled cancelled -> {
+          OrderBook book = books.get(cancelled.symbol());
+          if (book != null) {
+            book.cancel(cancelled.orderId());
+            applied++;
+          }
+        }
+        case TradeExecuted ignored -> {
+          // derived from the placements above — replaying it would book the fill twice
+        }
+      }
+    }
+    books.forEach((symbol, book) -> snapshotCache.put(symbol, book.snapshot()));
+    return applied;
+  }
+
+  /** Rebuilds the order exactly as submitted; the matcher re-derives how much of it filled. */
+  private static Order rebuildOrder(OrderPlaced e, long seq) {
+    return switch (e.type()) {
+      case MARKET ->
+          e.side().isBuy()
+              ? Order.marketBuy(
+                  e.orderId(), e.symbol(), e.originalQuantity(), seq, e.placedAt(),
+                  e.idempotencyKey())
+              : Order.marketSell(
+                  e.orderId(), e.symbol(), e.originalQuantity(), seq, e.placedAt(),
+                  e.idempotencyKey());
+      case LIMIT ->
+          e.side().isBuy()
+              ? Order.limitBuy(
+                  e.orderId(), e.symbol(), e.limitPrice().orElseThrow(), e.originalQuantity(),
+                  seq, e.placedAt(), e.idempotencyKey())
+              : Order.limitSell(
+                  e.orderId(), e.symbol(), e.limitPrice().orElseThrow(), e.originalQuantity(),
+                  seq, e.placedAt(), e.idempotencyKey());
+    };
   }
 
   private OrderBook bookFor(Symbol symbol) {
@@ -188,9 +286,8 @@ final class MatchingEventHandler implements EventHandler<OrderCommandEvent> {
     return Optional.ofNullable(snapshotCache.get(symbol));
   }
 
-  private static Order buildOrder(PlaceOrderCommand cmd, long seq) {
+  private static Order buildOrder(PlaceOrderCommand cmd, OrderId id, long seq) {
     Symbol symbol = Symbol.of(cmd.symbol());
-    OrderId id = OrderId.generate();
     Quantity qty = Quantity.of(cmd.quantityLots());
 
     return cmd.isMarketOrder()

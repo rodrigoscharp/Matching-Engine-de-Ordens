@@ -39,6 +39,26 @@ jobs:
       - name: Run integration tests (Testcontainers — requires Docker)
         run: ./mvnw verify -DskipITs=false
 
+      # Testcontainers disables itself when it cannot reach a Docker daemon, which turns every
+      # integration test into a silent skip and this job into a green no-op. Fail loudly instead.
+      - name: Assert integration tests actually ran
+        run: |
+          set -euo pipefail
+          reports=$(find . -path '*/target/failsafe-reports/*.xml' | wc -l)
+          if [ "$reports" -eq 0 ]; then
+            echo "::error::No failsafe reports produced — integration tests did not run."
+            exit 1
+          fi
+          skipped=$(grep -ho 'skipped="[0-9]*"' $(find . -path '*/target/failsafe-reports/TEST-*.xml') \
+            | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          run=$(grep -ho 'tests="[0-9]*"' $(find . -path '*/target/failsafe-reports/TEST-*.xml') \
+            | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          echo "Integration tests: $run total, $skipped skipped"
+          if [ "$skipped" -gt 0 ] || [ "$run" -eq 0 ]; then
+            echo "::error::Integration tests were skipped — Docker was not usable by Testcontainers."
+            exit 1
+          fi
+
       - name: Upload JaCoCo coverage reports
         if: always()
         uses: actions/upload-artifact@v4

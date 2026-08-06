@@ -53,28 +53,42 @@ class RedisIdempotencyStoreIT {
   }
 
   @Test
-  void should_store_and_retrieve_order_id() {
+  void should_reserve_and_retrieve_order_id() {
     var orderId = OrderId.generate();
-    store.store("key-1", orderId);
 
+    assertThat(store.reserve("key-1", orderId)).isTrue();
     assertThat(store.find("key-1")).contains(orderId);
   }
 
   @Test
-  void should_be_idempotent_for_same_key() {
+  void should_reject_a_second_reservation_of_the_same_key() {
     var first = OrderId.generate();
     var second = OrderId.generate();
 
-    store.store("key-dup", first);
-    store.store("key-dup", second); // should not overwrite
-
+    assertThat(store.reserve("key-dup", first)).isTrue();
+    assertThat(store.reserve("key-dup", second))
+        .as("the loser of the race must be told it lost")
+        .isFalse();
     assertThat(store.find("key-dup")).contains(first);
   }
 
   @Test
-  void should_store_with_ttl() {
+  void should_allow_reservation_again_after_release() {
+    var first = OrderId.generate();
+    var second = OrderId.generate();
+
+    store.reserve("key-released", first);
+    store.release("key-released");
+
+    assertThat(store.find("key-released")).isEmpty();
+    assertThat(store.reserve("key-released", second)).isTrue();
+    assertThat(store.find("key-released")).contains(second);
+  }
+
+  @Test
+  void should_reserve_with_ttl() {
     var orderId = OrderId.generate();
-    store.store("key-ttl", orderId);
+    store.reserve("key-ttl", orderId);
 
     Long ttlSeconds = redisTemplate.getExpire("idempotency:key-ttl");
     assertThat(ttlSeconds).isNotNull();
@@ -87,8 +101,8 @@ class RedisIdempotencyStoreIT {
     var id1 = OrderId.generate();
     var id2 = OrderId.generate();
 
-    store.store("key-a", id1);
-    store.store("key-b", id2);
+    store.reserve("key-a", id1);
+    store.reserve("key-b", id2);
 
     assertThat(store.find("key-a")).contains(id1);
     assertThat(store.find("key-b")).contains(id2);

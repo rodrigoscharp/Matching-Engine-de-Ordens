@@ -40,6 +40,8 @@ public final class TradingApplicationService
     implements PlaceOrderUseCase, CancelOrderUseCase, GetBookSnapshotUseCase {
 
   private final Map<Symbol, OrderBook> books = new ConcurrentHashMap<>();
+  private final java.util.concurrent.atomic.AtomicLong engineSequence =
+      new java.util.concurrent.atomic.AtomicLong();
   private final OrderEventStore eventStore;
   private final DomainEventPublisher eventPublisher;
   private final IdempotencyStore idempotencyStore;
@@ -55,57 +57,72 @@ public final class TradingApplicationService
 
   @Override
   public String place(PlaceOrderCommand cmd) {
-    // Idempotency check — return early if already processed
-    Optional<OrderId> existing = idempotencyStore.find(cmd.idempotencyKey());
-    if (existing.isPresent()) {
-      return existing.get().value().toString();
+    // Claim the key atomically before doing any work — a concurrent retry loses the race here
+    // rather than slipping past a check-then-act gap and creating a second order.
+    OrderId orderId = OrderId.generate();
+    if (!idempotencyStore.reserve(cmd.idempotencyKey(), orderId)) {
+      return idempotencyStore
+          .find(cmd.idempotencyKey())
+          .map(id -> id.value().toString())
+          .orElseThrow(
+              () ->
+                  new IllegalStateException(
+                      "Idempotency key " + cmd.idempotencyKey() + " was claimed but has no order id"));
     }
 
-    OrderBook book = bookFor(Symbol.of(cmd.symbol()));
-    long seq = book.nextSequence();
+    try {
+      OrderBook book = bookFor(Symbol.of(cmd.symbol()));
+      long seq = book.nextSequence();
 
-    Order order =
-        cmd.isMarketOrder()
-            ? buildMarketOrder(cmd, seq)
-            : buildLimitOrder(cmd, seq);
+      Order order =
+          cmd.isMarketOrder()
+              ? buildMarketOrder(cmd, orderId, seq)
+              : buildLimitOrder(cmd, orderId, seq);
 
-    List<OrderEvent> events = book.place(order);
+      List<OrderEvent> events = book.place(order);
 
-    eventStore.append(events);
-    eventPublisher.publish(events);
-    idempotencyStore.store(cmd.idempotencyKey(), order.orderId());
+      eventStore.append(engineSequence.incrementAndGet(), events);
+      eventPublisher.publish(events);
 
-    return order.orderId().value().toString();
+      return order.orderId().value().toString();
+    } catch (RuntimeException ex) {
+      idempotencyStore.release(cmd.idempotencyKey());
+      throw ex;
+    }
   }
 
   @Override
   public boolean cancel(CancelOrderCommand cmd) {
-    // Idempotency for cancellation — if we already processed this key, it was cancelled
-    Optional<OrderId> existing = idempotencyStore.find(cmd.idempotencyKey());
-    if (existing.isPresent()) {
-      return false; // already processed
-    }
-
     OrderId orderId = OrderId.of(cmd.orderId());
-    Symbol symbol = resolveSymbol(orderId);
-    if (symbol == null) {
-      return false; // order not found in any book
+    // A replayed cancel key means this exact request already ran — report its outcome rather than
+    // re-resolving an order that this very key has already removed from the book.
+    if (!idempotencyStore.reserve(cmd.idempotencyKey(), orderId)) {
+      return true;
     }
 
-    OrderBook book = books.get(symbol);
-    if (book == null) {
-      return false;
+    try {
+      Symbol symbol = resolveSymbol(orderId);
+      OrderBook book = symbol == null ? null : books.get(symbol);
+      if (book == null) {
+        idempotencyStore.release(cmd.idempotencyKey());
+        return false; // order not found in any book
+      }
+
+      Optional<OrderCancelled> cancelled = book.cancel(orderId);
+      cancelled.ifPresent(
+          event -> {
+            eventStore.append(engineSequence.incrementAndGet(), List.of(event));
+            eventPublisher.publish(List.of(event));
+          });
+
+      if (cancelled.isEmpty()) {
+        idempotencyStore.release(cmd.idempotencyKey());
+      }
+      return cancelled.isPresent();
+    } catch (RuntimeException ex) {
+      idempotencyStore.release(cmd.idempotencyKey());
+      throw ex;
     }
-
-    Optional<OrderCancelled> cancelled = book.cancel(orderId);
-    cancelled.ifPresent(
-        event -> {
-          eventStore.append(List.of(event));
-          eventPublisher.publish(List.of(event));
-          idempotencyStore.store(cmd.idempotencyKey(), orderId);
-        });
-
-    return cancelled.isPresent();
   }
 
   private OrderBook bookFor(Symbol symbol) {
@@ -121,9 +138,8 @@ public final class TradingApplicationService
     return null;
   }
 
-  private Order buildLimitOrder(PlaceOrderCommand cmd, long seq) {
+  private Order buildLimitOrder(PlaceOrderCommand cmd, OrderId id, long seq) {
     Symbol symbol = Symbol.of(cmd.symbol());
-    OrderId id = OrderId.generate();
     Price price = Price.of(cmd.limitPriceTicks());
     Quantity qty = Quantity.of(cmd.quantityLots());
 
@@ -134,9 +150,8 @@ public final class TradingApplicationService
     };
   }
 
-  private Order buildMarketOrder(PlaceOrderCommand cmd, long seq) {
+  private Order buildMarketOrder(PlaceOrderCommand cmd, OrderId id, long seq) {
     Symbol symbol = Symbol.of(cmd.symbol());
-    OrderId id = OrderId.generate();
     Quantity qty = Quantity.of(cmd.quantityLots());
 
     return switch (cmd.side()) {

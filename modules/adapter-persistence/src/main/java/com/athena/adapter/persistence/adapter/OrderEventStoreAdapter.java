@@ -31,17 +31,25 @@ public class OrderEventStoreAdapter implements OrderEventStore {
 
   @Override
   @Transactional
-  public void append(List<OrderEvent> events) {
-    var records = events.stream().map(mapper::toRecord).toList();
+  public void append(long engineSequence, List<OrderEvent> events) {
+    var records = events.stream().map(e -> mapper.toRecord(e, engineSequence)).toList();
     repository.saveAll(records);
   }
 
   @Override
   public List<OrderEvent> loadEvents(OrderId orderId) {
-    return repository
-        .findByOrderIdOrderByIdAsc(orderId.value().toString())
-        .stream()
+    return repository.findByOrderIdOrCounterparty(orderId.value()).stream()
         .map(mapper::toDomain)
         .toList();
+  }
+
+  @Override
+  public long lastEngineSequence() {
+    return repository.findMaxEngineSequence();
+  }
+
+  @Override
+  public List<OrderEvent> loadAll() {
+    return repository.findAllInEngineOrder().stream().map(mapper::toDomain).toList();
   }
 }

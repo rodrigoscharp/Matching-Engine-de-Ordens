@@ -37,8 +37,14 @@ public class RedisIdempotencyStore implements IdempotencyStore {
   }
 
   @Override
-  public void store(String idempotencyKey, OrderId orderId) {
-    redis.opsForValue()
-        .setIfAbsent(KEY_PREFIX + idempotencyKey, orderId.value().toString(), TTL);
+  public boolean reserve(String idempotencyKey, OrderId orderId) {
+    return Boolean.TRUE.equals(
+        redis.opsForValue()
+            .setIfAbsent(KEY_PREFIX + idempotencyKey, orderId.value().toString(), TTL));
+  }
+
+  @Override
+  public void release(String idempotencyKey) {
+    redis.delete(KEY_PREFIX + idempotencyKey);
   }
 }

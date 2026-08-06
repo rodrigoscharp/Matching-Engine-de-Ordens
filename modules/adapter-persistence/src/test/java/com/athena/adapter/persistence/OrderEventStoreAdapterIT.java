@@ -3,6 +3,7 @@ package com.athena.adapter.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.athena.adapter.persistence.adapter.OrderEventStoreAdapter;
+import com.athena.trading.application.port.outbound.OrderEventStore;
 import com.athena.adapter.persistence.mapper.OrderEventMapper;
 import com.athena.adapter.persistence.repository.SpringDataOrderEventRepository;
 import com.athena.trading.domain.OrderId;
@@ -16,8 +17,6 @@ import com.athena.trading.domain.event.OrderCancelled;
 import com.athena.trading.domain.event.OrderEvent;
 import com.athena.trading.domain.event.OrderPlaced;
 import com.athena.trading.domain.event.TradeExecuted;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -25,12 +24,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.jdbc.DataJdbcTest;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.jdbc.Sql;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -41,8 +37,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @DataJdbcTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({OrderEventStoreAdapter.class, OrderEventMapper.class, OrderEventStoreAdapterIT.TestConfig.class})
-@Sql("/db/migration/V1__create_order_events.sql")
+@Import({OrderEventStoreAdapter.class, OrderEventMapper.class})
 @Testcontainers(disabledWithoutDocker = true)
 class OrderEventStoreAdapterIT {
 
@@ -57,7 +52,9 @@ class OrderEventStoreAdapterIT {
     registry.add("spring.datasource.password", postgres::getPassword);
   }
 
-  @Autowired private OrderEventStoreAdapter adapter;
+  // Injected through the port: @Transactional wraps the adapter in a JDK interface proxy,
+  // so the concrete type is not what lands in the context.
+  @Autowired private OrderEventStore adapter;
   @Autowired private SpringDataOrderEventRepository repository;
 
   private static final Symbol PETR4 = Symbol.of("PETR4");
@@ -68,7 +65,7 @@ class OrderEventStoreAdapterIT {
     var orderId = OrderId.generate();
     var event = orderPlacedEvent(orderId);
 
-    adapter.append(List.of(event));
+    adapter.append(1L, List.of(event));
 
     var loaded = adapter.loadEvents(orderId);
     assertThat(loaded).hasSize(1);
@@ -95,7 +92,7 @@ class OrderEventStoreAdapterIT {
             Quantity.of(50),
             NOW);
 
-    adapter.append(List.of(placed, traded));
+    adapter.append(1L, List.of(placed, traded));
 
     var loaded = adapter.loadEvents(buyId);
     assertThat(loaded).hasSize(2);
@@ -108,13 +105,29 @@ class OrderEventStoreAdapterIT {
     var orderId = OrderId.generate();
     var cancelled = new OrderCancelled(orderId, PETR4, Quantity.of(100), NOW);
 
-    adapter.append(List.of(cancelled));
+    adapter.append(1L, List.of(cancelled));
 
     var loaded = adapter.loadEvents(orderId);
     assertThat(loaded).hasSize(1);
     assertThat(loaded.getFirst()).isInstanceOf(OrderCancelled.class);
     var c = (OrderCancelled) loaded.getFirst();
     assertThat(c.cancelledQuantity()).isEqualTo(Quantity.of(100));
+  }
+
+  @Test
+  void should_load_a_trade_from_the_sell_side_as_well_as_the_buy_side() {
+    var buyId = OrderId.generate();
+    var sellId = OrderId.generate();
+    var traded =
+        new TradeExecuted(
+            TradeId.generate(), PETR4, buyId, sellId, Price.of(1050), Quantity.of(50), NOW);
+
+    adapter.append(1L, List.of(traded));
+
+    assertThat(adapter.loadEvents(buyId)).hasSize(1);
+    assertThat(adapter.loadEvents(sellId))
+        .as("a trade is a two-sided fact — the seller's history is not optional")
+        .hasSize(1);
   }
 
   @Test
@@ -131,7 +144,7 @@ class OrderEventStoreAdapterIT {
             orderId, PETR4, OrderSide.BUY, OrderType.MARKET,
             Optional.empty(), Quantity.of(100), 1L, NOW, "key-mkt", NOW);
 
-    adapter.append(List.of(event));
+    adapter.append(1L, List.of(event));
 
     var loaded = (OrderPlaced) adapter.loadEvents(orderId).getFirst();
     assertThat(loaded.type()).isEqualTo(OrderType.MARKET);
@@ -146,11 +159,4 @@ class OrderEventStoreAdapterIT {
         Optional.of(Price.of(1050)), Quantity.of(100), 1L, NOW, "key-" + orderId, NOW);
   }
 
-  @Configuration
-  static class TestConfig {
-    @Bean
-    ObjectMapper objectMapper() {
-      return new ObjectMapper().registerModule(new JavaTimeModule());
-    }
-  }
 }

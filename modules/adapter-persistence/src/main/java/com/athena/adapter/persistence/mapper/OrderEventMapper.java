@@ -12,6 +12,7 @@ import com.athena.trading.domain.event.OrderPlaced;
 import com.athena.trading.domain.event.TradeExecuted;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.athena.adapter.persistence.entity.JsonPayload;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -37,11 +38,11 @@ public class OrderEventMapper {
     this.objectMapper = objectMapper;
   }
 
-  public OrderEventRecord toRecord(OrderEvent event) {
+  public OrderEventRecord toRecord(OrderEvent event, long engineSequence) {
     return switch (event) {
-      case OrderPlaced e -> toRecord(e);
-      case TradeExecuted e -> toRecord(e);
-      case OrderCancelled e -> toRecord(e);
+      case OrderPlaced e -> toRecord(e, engineSequence);
+      case TradeExecuted e -> toRecord(e, engineSequence);
+      case OrderCancelled e -> toRecord(e, engineSequence);
     };
   }
 
@@ -57,7 +58,7 @@ public class OrderEventMapper {
 
   // ── to record ─────────────────────────────────────────────────────────────────
 
-  private OrderEventRecord toRecord(OrderPlaced e) {
+  private OrderEventRecord toRecord(OrderPlaced e, long engineSequence) {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("side", e.side().name());
     payload.put("type", e.type().name());
@@ -67,36 +68,44 @@ public class OrderEventMapper {
     payload.put("idempotencyKey", e.idempotencyKey());
     return new OrderEventRecord(
         e.symbol().value(),
-        e.orderId().value().toString(),
+        e.orderId().value(),
+        null,
         e.sequence(),
+        engineSequence,
         ORDER_PLACED,
         writeJson(payload),
         e.occurredAt());
   }
 
-  private OrderEventRecord toRecord(TradeExecuted e) {
+  private OrderEventRecord toRecord(TradeExecuted e, long engineSequence) {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("tradeId", e.tradeId().value().toString());
     payload.put("buyOrderId", e.buyOrderId().value().toString());
     payload.put("sellOrderId", e.sellOrderId().value().toString());
     payload.put("executionPriceTicks", e.executionPrice().ticks());
     payload.put("executionQuantityLots", e.executionQuantity().lots());
+    // Both sides are indexed columns: a trade belongs to the seller's history just as much as the
+    // buyer's, and a JSON field cannot be joined on.
     return new OrderEventRecord(
         e.symbol().value(),
-        e.buyOrderId().value().toString(),
+        e.buyOrderId().value(),
+        e.sellOrderId().value(),
         null,
+        engineSequence,
         TRADE_EXECUTED,
         writeJson(payload),
         e.occurredAt());
   }
 
-  private OrderEventRecord toRecord(OrderCancelled e) {
+  private OrderEventRecord toRecord(OrderCancelled e, long engineSequence) {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("cancelledQuantityLots", e.cancelledQuantity().lots());
     return new OrderEventRecord(
         e.symbol().value(),
-        e.orderId().value().toString(),
+        e.orderId().value(),
         null,
+        null,
+        engineSequence,
         ORDER_CANCELLED,
         writeJson(payload),
         e.occurredAt());
@@ -118,7 +127,7 @@ public class OrderEventMapper {
     var idempotencyKey = (String) p.get("idempotencyKey");
 
     return new OrderPlaced(
-        OrderId.of(r.orderId()),
+        new OrderId(r.orderId()),
         Symbol.of(r.symbol()),
         side,
         type,
@@ -145,7 +154,7 @@ public class OrderEventMapper {
   private OrderCancelled toOrderCancelled(OrderEventRecord r) {
     Map<String, Object> p = readJson(r.payload());
     return new OrderCancelled(
-        OrderId.of(r.orderId()),
+        new OrderId(r.orderId()),
         Symbol.of(r.symbol()),
         Quantity.of(((Number) p.get("cancelledQuantityLots")).longValue()),
         r.occurredAt());
@@ -153,19 +162,19 @@ public class OrderEventMapper {
 
   // ── JSON helpers ──────────────────────────────────────────────────────────────
 
-  private String writeJson(Map<String, Object> payload) {
+  private JsonPayload writeJson(Map<String, Object> payload) {
     try {
-      return objectMapper.writeValueAsString(payload);
+      return JsonPayload.of(objectMapper.writeValueAsString(payload));
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialize event payload", e);
     }
   }
 
-  private Map<String, Object> readJson(String json) {
+  private Map<String, Object> readJson(JsonPayload payload) {
     try {
-      return objectMapper.readValue(json, new TypeReference<>() {});
+      return objectMapper.readValue(payload.json(), new TypeReference<>() {});
     } catch (JsonProcessingException e) {
-      throw new IllegalStateException("Failed to deserialize event payload: " + json, e);
+      throw new IllegalStateException("Failed to deserialize event payload: " + payload, e);
     }
   }
 }
