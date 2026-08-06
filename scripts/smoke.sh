@@ -6,11 +6,15 @@
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8080}"
+# The actuator lives on its own port now — it is an operator interface, not part of the API.
+MGMT_URL="${2:-http://localhost:9081}"
 PASS=0
 FAIL=0
 
-ok()   { echo "  [PASS] $*"; ((PASS++)); }
-fail() { echo "  [FAIL] $*" >&2; ((FAIL++)); }
+# NB: use $((x+1)), not ((x++)). The latter evaluates to the pre-increment value, so the very
+# first call returns exit status 1 and `set -e` kills the script after one passing check.
+ok()   { echo "  [PASS] $*"; PASS=$((PASS+1)); }
+fail() { echo "  [FAIL] $*" >&2; FAIL=$((FAIL+1)); }
 
 check_json_field() {
   local label="$1" json="$2" field="$3" expected="$4"
@@ -29,7 +33,7 @@ echo "────────────────────────�
 
 # ── 1. Health check ────────────────────────────────────────────────────────────
 echo "[1] Health"
-HEALTH=$(curl -sf "$BASE_URL/actuator/health" || echo "{}")
+HEALTH=$(curl -sf "$MGMT_URL/actuator/health" || echo "{}")
 check_json_field "actuator/health is UP" "$HEALTH" ".status" "UP"
 
 # ── 2. Place a limit buy order ─────────────────────────────────────────────────

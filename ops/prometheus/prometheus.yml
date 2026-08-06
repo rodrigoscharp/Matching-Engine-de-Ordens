@@ -10,7 +10,8 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets:
-          - "host.docker.internal:8080"
+          # Management port, not the API port — see `management.server.port` in application.yml
+          - "host.docker.internal:9081"
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance

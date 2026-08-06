@@ -97,15 +97,20 @@ grpc:
 
 management:
   server:
-    port: ${MANAGEMENT_PORT:8080}
+    # Separate port by default: the actuator is an operator interface, not part of the public API.
+    # There is no authentication in front of it, so it must not share the port serving clients.
+    # Expose 9081 only to the internal network / scrape targets.
+    port: ${MANAGEMENT_PORT:9081}
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics,env,loggers
+        # `env` leaks configuration and `loggers` accepts POST to change log levels at runtime.
+        # Neither belongs on an unauthenticated endpoint; enable them per-environment if needed.
+        include: ${MANAGEMENT_ENDPOINTS:health,info,prometheus,metrics}
       base-path: /actuator
   endpoint:
     health:
-      show-details: always
+      show-details: ${HEALTH_SHOW_DETAILS:when-authorized}
       probes:
         enabled: true
   health:

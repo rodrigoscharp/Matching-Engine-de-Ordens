@@ -253,8 +253,8 @@ make run
 |---|---|
 | Trading Dashboard | http://localhost:8080 |
 | Swagger UI | http://localhost:8080/swagger-ui.html |
-| Health | http://localhost:8080/actuator/health |
-| Prometheus metrics | http://localhost:8080/actuator/prometheus |
+| Health | http://localhost:9081/actuator/health |
+| Prometheus metrics | http://localhost:9081/actuator/prometheus |
 | gRPC | localhost:9091 |
 | Grafana | http://localhost:3000 (admin / admin) |
 

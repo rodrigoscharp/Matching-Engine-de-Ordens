@@ -49,9 +49,15 @@ verify: ## Full verification: compile, unit tests, ArchUnit, JaCoCo (Spotless en
 	@echo "→ Running full verification pipeline…"
 	$(MVN) verify
 
+# Docker >= 29 refuses API versions below 1.44, and the docker-java client bundled with
+# Testcontainers negotiates lower — Testcontainers then reports "no valid Docker environment"
+# and every IT is silently SKIPPED rather than failing. Pin the API version to match your daemon
+# (`docker version --format '{{.Server.MinAPIVersion}}'`); leave empty for older daemons.
+DOCKER_API_VERSION ?= 1.44
+
 verify-it: ## Full verification including integration tests (requires Docker)
 	@echo "→ Running full verification with integration tests (requires Docker)…"
-	$(MVN) verify -DskipITs=false
+	$(MVN) verify -DskipITs=false $(if $(DOCKER_API_VERSION),-Dapi.version=$(DOCKER_API_VERSION),)
 
 # ── Run ────────────────────────────────────────────────────────────────────────
 run: ## Start the application locally (requires infra-up first)
@@ -84,7 +90,7 @@ deploy-demo: ## Build image and start full demo stack
 	@echo ""
 	@echo "  Athena is running:"
 	@echo "  REST   → http://localhost:8080/swagger-ui.html"
-	@echo "  Health → http://localhost:8080/actuator/health"
-	@echo "  Metrics → http://localhost:8080/actuator/prometheus"
+	@echo "  Health → http://localhost:9081/actuator/health"
+	@echo "  Metrics → http://localhost:9081/actuator/prometheus"
 	@echo "  Grafana → http://localhost:3000  (admin/admin)"
 	@echo ""
