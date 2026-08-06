@@ -17,7 +17,7 @@ A Athena é um sistema independente que recebe ordens de clientes via três prot
 |-----------|-----------|-----------------|
 | Matching Engine | Java 21 / Spring Boot 3.3 | Core do sistema — recebe ordens, casa, publica |
 | PostgreSQL 16 | RDBMS | Event store (source of truth), projeções lentas |
-| Redis 7 | In-memory store | Book snapshots, last trade, idempotency keys |
+| Redis 7 | In-memory store | Reserva de idempotency keys (TTL 24h) |
 | Kafka 3.7 | Event streaming | Publicação de execuções e market data |
 | Schema Registry | Confluent 7.6 | Contrato Avro entre producers e consumers |
 
@@ -56,25 +56,41 @@ Os adapters implementam as portas de saída e chamam as portas de entrada.
 
 **Command side** (escrita):
 - Recebe `PlaceOrderCommand` via REST/gRPC
-- Valida `Idempotency-Key` no Redis
-- Persiste `OrderPlacedEvent` no Postgres (outbox)
+- **Reserva** o `Idempotency-Key` no Redis (SETNX atômico) antes de enfileirar qualquer trabalho —
+  um retry concorrente perde a corrida aqui e nunca chega ao ring buffer
 - Publica no ring buffer do Disruptor
-- Retorna `OrderId` imediatamente (ack síncrono, matching assíncrono)
+- O matching roda na thread única; a persistência sai em virtual thread
+- Retorna `201` com o `OrderId` **somente depois** que os eventos estão no event store. A thread de
+  matching nunca espera — quem espera é a request thread. Falha de persistência libera a chave e
+  devolve erro, em vez de confirmar uma ordem que não existe.
 
 **Query side** (leitura):
-- `GET /books/{symbol}` lê snapshot do Redis (atualizado pelo event processor)
-- `GET /trades` lê projeção do Postgres
-- Eventual consistency declarada — headers `X-Book-Sequence` e `X-Last-Updated`
+- `GET /books/{symbol}` lê o snapshot mantido em memória pelo engine (`snapshotCache`)
+- Eventual consistency declarada via o campo `takenAt` do snapshot
+
+> Não implementado: projeção de trades no Postgres, `GET /trades`, headers `X-Book-Sequence` /
+> `X-Last-Updated`.
 
 ## Event Sourcing
 
 Todo estado do `OrderBook` deriva de eventos imutáveis persistidos na tabela `order_events`:
 
 ```sql
-order_events(id, symbol, sequence, event_type, payload JSONB, occurred_at, idempotency_key)
+order_events(id, symbol, order_id UUID, counterparty_order_id UUID, sequence,
+             engine_sequence, event_type, payload JSONB, occurred_at, created_at)
 ```
 
-No startup, o engine faz replay de todos os eventos para reconstruir o estado em memória. Para performance, snapshots periódicos evitam replay completo (melhoria planejada).
+No startup, o engine faz replay de todo o log antes de abrir o ring buffer
+(`DisruptorMatchingEngine.replayEventLog`). Só os **comandos** são reaplicados — `OrderPlaced` e
+`OrderCancelled`. `TradeExecuted` é fato *derivado*: reaplicá-lo contaria o fill duas vezes. Rodar
+os mesmos comandos pelo mesmo matcher determinístico reproduz os mesmos trades — é essa propriedade
+que faz do log uma fonte de verdade.
+
+A ordem do replay vem da coluna `engine_sequence`, não de `id`: as linhas são gravadas por virtual
+threads e chegam fora de ordem, então ordem de escrita não reproduz ordem de decisão.
+
+> Snapshots periódicos para evitar replay completo continuam sendo melhoria planejada — hoje o
+> tempo de startup cresce linearmente com o tamanho do log.
 
 ## Single-Writer Principle (Disruptor)
 
@@ -103,11 +119,12 @@ sequenceDiagram
 
     C->>R: POST /api/v1/orders (Idempotency-Key: X)
     R->>A: PlaceOrderCommand(key=X, ...)
-    A->>RC: Check idempotency key X
-    RC-->>A: not found (new)
+    A->>RC: SETNX idempotency key X → OrderId
+    RC-->>A: reserved (new)
     A->>DB: INSERT order_events (OrderPlacedEvent)
+    DB-->>A: committed
     A->>R: OrderId (ack)
-    R-->>C: 202 Accepted {orderId}
+    R-->>C: 201 Created {orderId}
 
     Note over A,D: Async via Disruptor
 
@@ -124,8 +141,18 @@ sequenceDiagram
 
 **Idempotência**: toda operação de escrita aceita `Idempotency-Key` (UUID). Segundo request com mesma key retorna resultado cacheado. TTL 24h no Redis.
 
-**Outbox Pattern**: eventos são primeiro escritos no Postgres, depois publicados no Kafka por um relay assíncrono. Garante at-least-once delivery sem two-phase commit.
+**Ordem de escrita**: o evento vai primeiro para o Postgres (que confirma a ordem ao cliente) e só
+depois para o Kafka, em publicação best-effort protegida por circuit breaker. Se o Kafka estiver
+fora, a ordem continua válida e o log no Postgres permite republicar.
 
-**Bulkhead**: rate limiting por API key via Bucket4j. Circuit breaker por dependência externa via Resilience4j.
+> Não implementado: relay de outbox de verdade (uma tabela varrida por um processo separado). Hoje
+> uma falha de publicação depois do ack só é recuperável relendo o event store manualmente.
+> Rate limiting por API key via Bucket4j também **não** existe — a dependência está declarada no
+> `dependencyManagement` do pom mas não é usada em lugar nenhum.
 
-**Structured Logging**: todo log usa `log.info("message", kv("key", value))` — nunca concatenação de strings. TraceId e SpanId propagados via MDC.
+**Circuit breaker**: por dependência externa via Resilience4j (`kafkaPublisher`).
+
+**Structured Logging**: logs usam placeholders SLF4J (`log.info("... {}", value)`). O contexto MDC
+(`symbol`, `orderId`, `traceId`, `spanId`) é copiado explicitamente para as virtual threads de I/O —
+elas não herdam o MDC da thread de matching, e sem isso justamente os logs de erro de persistência
+sairiam sem correlação.
