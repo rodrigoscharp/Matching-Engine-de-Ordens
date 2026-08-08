@@ -33,9 +33,14 @@
 
 ---
 
-A high-performance, multi-asset order matching engine built with Java 21 and Spring Boot 3.3.
-Designed to demonstrate production-grade engineering practices relevant to fintech backend roles:
-hexagonal architecture, event sourcing, LMAX Disruptor concurrency, and full observability stack.
+A high-performance, multi-asset order matching engine built with Java 21 and Spring Boot 3.3,
+using hexagonal architecture, event sourcing, LMAX Disruptor concurrency, and a full
+observability stack.
+
+Athena is a study of exchange-grade engineering built in the open: the goal is a codebase where
+every significant decision is written down and enforced by tests, not just described. It is not
+a production trading venue and has never handled real orders — see
+[Project Status](#project-status).
 
 ---
 
@@ -58,6 +63,28 @@ Client → REST / gRPC / WebSocket
 The domain is intentionally decoupled from every framework. The matching logic in `modules/domain`
 has zero Spring, zero Kafka, zero JDBC — it is plain Java 21. Hexagonal boundary violations
 break the build via ArchUnit.
+
+---
+
+## Project Status
+
+Athena is functional end-to-end on a local machine and is under active development. Before you
+build on it, know what it is and is not:
+
+- **Not a production trading venue.** There is no authentication, authorization, rate limiting,
+  position or risk management, settlement, or regulatory reporting. Do not expose it to the
+  public internet or point real money at it.
+- **Single-node.** Matching is deliberately single-writer per JVM (see
+  [ADR-003](docs/adr/ADR-003-disruptor-virtual-threads.md)). There is no clustering, leader
+  election, or cross-node failover.
+- **The dashboard simulates activity when idle.** With an empty book the UI at
+  `http://localhost:8080` renders a generated mock feed so the page is not blank. As soon as
+  real orders arrive for a symbol, that symbol switches to live engine data. Orders you place
+  via REST/gRPC are always real — only the idle animation is synthetic.
+- **Performance figures are targets, not benchmark results.** See
+  [Performance Targets](#performance-targets).
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -210,7 +237,10 @@ A violation fails `mvn verify` and blocks the CI pipeline.
 
 ## Performance Targets
 
-Measured by JMH (micro-benchmarks) and Gatling (end-to-end load tests):
+These are the design targets the engine is built and tuned against, verified locally with JMH
+(micro-benchmarks) and Gatling (end-to-end load tests). They are not published results from a
+controlled benchmark environment — numbers on your hardware will differ, so measure before you
+quote them:
 
 | Metric | Target |
 |---|---|
@@ -354,6 +384,16 @@ make lint         Check formatting without applying changes
 
 ---
 
+## Contributing
+
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers IDE setup,
+commit conventions, the Java style rules this codebase enforces, and the Definition of Done.
+
+Before opening a PR, run `make verify` — it runs the unit tests, the Testcontainers integration
+tests, and the ArchUnit boundary rules that gate the build.
+
+---
+
 ## License
 
-[MIT](LICENSE)
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Rodrigo Scharp.
