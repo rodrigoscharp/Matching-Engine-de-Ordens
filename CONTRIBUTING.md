@@ -16,11 +16,11 @@
 
 ## Conventional Commits
 
-Todos os commits em inglês, formato `type(scope): description`.
+All commits are written in English, in the form `type(scope): description`.
 
-Tipos: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `perf`, `ci`.
+Types: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `perf`, `ci`.
 
-Exemplos:
+Examples:
 ```
 feat(trading): add price-time priority matching for limit orders
 fix(persistence): correct sequence gap detection on replay
@@ -28,11 +28,12 @@ test(domain): add property-based tests for OrderBook invariants
 chore(infra): upgrade Kafka to 3.7.1
 ```
 
-## Padrões Java
+## Java Conventions
 
-**Sem Lombok.** Records cobrem 90% dos casos de valor. Para mutabilidade controlada, use builders manuais ou factory methods estáticos.
+**No Lombok.** Records cover 90% of value-object cases. For controlled mutability, use manual
+builders or static factory methods.
 
-**Records para objetos de valor:**
+**Records for value objects:**
 ```java
 record OrderId(UUID value) {
     OrderId { Objects.requireNonNull(value, "value"); }
@@ -40,40 +41,42 @@ record OrderId(UUID value) {
 }
 ```
 
-**Sealed interfaces para hierarquias fechadas:**
+**Sealed interfaces for closed hierarchies:**
 ```java
 sealed interface OrderEvent permits OrderPlaced, OrderMatched, OrderCancelled {}
 record OrderPlaced(OrderId orderId, ...) implements OrderEvent {}
 ```
 
-**`var` com moderação:** use quando o tipo é óbvio pelo contexto (`var order = Order.of(...)`), evite quando obscurece a intenção.
+**Use `var` sparingly:** use it when the type is obvious from context (`var order = Order.of(...)`),
+avoid it when it obscures intent.
 
-**Sem wildcard imports.** Configure seu IDE para não usar `import com.athena.*`.
+**No wildcard imports.** Configure your IDE not to collapse imports into `com.athena.*`.
 
-**Sem `@Autowired` em campo.** Sempre injeção por construtor:
+**No field `@Autowired`.** Always use constructor injection:
 ```java
-// Errado
+// Wrong
 @Autowired private OrderRepository repository;
 
-// Certo
+// Right
 private final OrderRepository repository;
 OrderService(OrderRepository repository) { this.repository = repository; }
 ```
 
-**Sem `Optional` como parâmetro de método.** Use overloading ou null check explícito.
+**No `Optional` as a method parameter.** Use overloading or an explicit null check.
 
-**Sem `double`/`float` em valores monetários.** Use `long` no domínio (ticks/lots), `BigDecimal` na borda. Ver ADR-006.
+**No `double`/`float` for monetary values.** Use `long` in the domain (ticks/lots) and
+`BigDecimal` at the boundary. See ADR-006.
 
-**Sem log com concatenação:**
+**No string concatenation in logs:**
 ```java
-// Errado
+// Wrong
 log.info("Order " + orderId + " matched at " + price);
 
-// Certo
+// Right
 log.info("Order matched", kv("orderId", orderId), kv("price", price));
 ```
 
-## Estrutura de pacote hexagonal
+## Hexagonal Package Structure
 
 ```
 com.athena.{context}/
@@ -85,11 +88,11 @@ com.athena.{context}/
         command/        # Command objects (inbound DTOs)
         query/          # Query objects
         port/
-            inbound/    # Interfaces que o mundo chama
-            outbound/   # Interfaces que o app precisa do mundo
+            inbound/    # Interfaces the outside world calls
+            outbound/   # Interfaces the application needs from the outside world
         service/        # Application services (orchestration)
     adapter/
-        rest/           # @RestController (nunca lógica de negócio)
+        rest/           # @RestController (never business logic)
         grpc/           # gRPC service implementations
         ws/             # WebSocket handlers
         persistence/    # Spring Data JDBC repositories
@@ -97,9 +100,9 @@ com.athena.{context}/
         redis/          # Redis operations
 ```
 
-## Testes
+## Tests
 
-**Nomenclatura:** `should_<expected_behavior>_when_<condition>`.
+**Naming:** `should_<expected_behavior>_when_<condition>`.
 
 ```java
 @Test
@@ -124,33 +127,36 @@ assertThat(trades).hasSize(1);
 assertThat(trades.get(0).quantity()).isEqualTo(qty(100));
 ```
 
-**Cobertura mínima:** 90% linhas, 80% branches, 60% métodos nos módulos `domain` e `application`. Enforçado pelo JaCoCo no `make verify`.
+**Minimum coverage:** 90% lines, 80% branches, 60% methods in the `domain` and `application`
+modules. Enforced by JaCoCo during `make verify`.
 
-**Mutation testing:** `domain` e `application` devem ter mutation score > 75% (PIT). Rodar com `mvn pitest:mutationCoverage`.
+**Mutation testing:** `domain` and `application` must keep a mutation score above 75% (PIT). Run
+it with `mvn pitest:mutationCoverage`.
 
-**Sem `Thread.sleep` em testes.** Use `Awaitility`:
+**No `Thread.sleep` in tests.** Use `Awaitility`:
 ```java
 await().atMost(5, SECONDS).until(() -> consumer.received().size() >= 1);
 ```
 
-**Sem H2 ou embedded databases.** Todos os testes de integração usam Testcontainers com Postgres/Redis/Kafka reais.
+**No H2 or embedded databases.** All integration tests use Testcontainers with real
+Postgres/Redis/Kafka.
 
 ## Definition of Done (DoD)
 
-Uma tarefa está pronta quando:
-- [ ] `make verify` passa sem warnings
-- [ ] Novos caminhos têm testes unitários (AAA, nomenclatura correta)
-- [ ] Nenhuma regra ArchUnit violada
-- [ ] Toda operação pública emite métrica, trace e log estruturado
-- [ ] `Idempotency-Key` implementado para toda escrita de estado
-- [ ] Sem `double`/`float` em valores monetários
-- [ ] Sem Spring no módulo `domain`
-- [ ] PR descreve a decisão (não apenas o que mudou)
+A task is done when:
+- [ ] `make verify` passes without warnings
+- [ ] New code paths have unit tests (AAA, correct naming)
+- [ ] No ArchUnit rule is violated
+- [ ] Every public operation emits a metric, a trace, and a structured log
+- [ ] `Idempotency-Key` is implemented for every state-changing write
+- [ ] No `double`/`float` in monetary values
+- [ ] No Spring in the `domain` module
+- [ ] The PR describes the decision, not just what changed
 
-## Quando criar um novo ADR
+## When to Write a New ADR
 
-- Mudança de dependência significativa (novo framework, novo banco)
-- Decisão de arquitetura que não é óbvia ou que tem alternativas fortes
-- Qualquer mudança que quebre a convenção estabelecida com justificativa
+- A significant dependency change (new framework, new database)
+- An architectural decision that is not obvious or that has strong alternatives
+- Any change that breaks an established convention, along with its justification
 
-Copie `docs/adr/_TEMPLATE.md`, preencha todos os campos, e mencione o ADR no PR.
+Copy `docs/adr/_TEMPLATE.md`, fill in every field, and reference the ADR in the PR.
